@@ -4,6 +4,7 @@ export interface InputBindings {
   onJump: () => void
   onAnyKey: () => void
   onRestart: () => void
+  onPause: () => void
 }
 
 export function bindInput(b: InputBindings): () => void {
@@ -34,6 +35,11 @@ export function bindInput(b: InputBindings): () => void {
       case 'r':
       case 'R':
         b.onRestart()
+        break
+      case 'p':
+      case 'P':
+      case 'Escape':
+        b.onPause()
         break
     }
   }

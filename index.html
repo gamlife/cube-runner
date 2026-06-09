@@ -375,6 +375,59 @@
         100% { opacity: 0; }
       }
 
+      /* ----- Audio toggle ----- */
+      #audio-toggle {
+        position: absolute;
+        top: max(20px, env(safe-area-inset-top, 20px));
+        right: 20px;
+        /* Shifted up to sit above #speed when on touch (no — speed is on the right too).
+           Place audio toggle in a stack alongside speed. */
+        top: auto;
+        bottom: max(96px, calc(env(safe-area-inset-bottom, 20px) + 96px));
+        right: 20px;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(11, 11, 26, 0.6);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
+      }
+      #audio-toggle.muted { color: var(--muted); }
+      #audio-toggle:active { transform: scale(0.92); }
+
+      /* ----- Best score / new best badges ----- */
+      .best-score {
+        font-size: 14px;
+        color: var(--muted);
+        margin: 6px 0 18px;
+        letter-spacing: 1.5px;
+      }
+      .best-score strong { color: var(--gold); font-weight: 700; font-size: 16px; }
+      .new-best {
+        font-size: 14px;
+        color: var(--gold);
+        margin: 6px 0 18px;
+        letter-spacing: 2px;
+        font-weight: 700;
+        animation: new-best-glow 1.4s ease-in-out infinite;
+      }
+      @keyframes new-best-glow {
+        0%, 100% { text-shadow: 0 0 8px rgba(255, 210, 74, 0.5); }
+        50% { text-shadow: 0 0 16px rgba(255, 210, 74, 0.9); }
+      }
+
       /* ----- Milestone banner ----- */
       #milestone {
         position: absolute;
@@ -435,6 +488,7 @@
         <span class="kbd-hint">
           <kbd>&larr;</kbd> <kbd>&rarr;</kbd> switch lanes &nbsp;&middot;&nbsp;
           <kbd>Space</kbd> jump &nbsp;&middot;&nbsp;
+          <kbd>P</kbd> pause &nbsp;&middot;&nbsp;
           <kbd>R</kbd> restart
         </span>
         <span class="touch-hint">
@@ -448,6 +502,7 @@
       </div>
       <div id="milestone"></div>
       <div id="hit-flash"></div>
+      <button id="audio-toggle" data-no-input type="button" aria-label="Toggle sound">🔊</button>
       <div id="vignette"></div>
       <div id="overlay">
         <div class="panel" id="panel">

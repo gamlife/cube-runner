@@ -10,3 +10,27 @@ game.start().catch((err) => {
     overlay.classList.add('visible')
   }
 })
+
+// Audio toggle button
+const audioBtn = document.getElementById('audio-toggle')
+if (audioBtn) {
+  let muted = false
+  try {
+    muted = window.localStorage.getItem('cube-runner-muted') === '1'
+  } catch {}
+  const refresh = () => {
+    audioBtn.textContent = muted ? '🔇' : '🔊'
+    audioBtn.classList.toggle('muted', muted)
+  }
+  refresh()
+  audioBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    muted = !muted
+    refresh()
+    try {
+      window.localStorage.setItem('cube-runner-muted', muted ? '1' : '0')
+    } catch {}
+    game.setMuted(muted)
+  })
+}

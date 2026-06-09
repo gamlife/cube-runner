@@ -134,16 +134,37 @@ export class Hud {
     this.restartHandler = handler
   }
 
-  showStart() {
+  showStart(bestScore: number) {
     this.gameOverShown = false
+    const bestBadge = bestScore > 0
+      ? `<p class="best-score">Best: <strong>${bestScore}</strong></p>`
+      : ''
     this.panel.innerHTML = `
       <h1>Cube Runner</h1>
       <p class="subtitle">Endless 3D runner</p>
+      ${bestBadge}
       <p class="start-hint kbd">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd> to start</p>
       <p class="start-hint touch">Tap <strong>◀</strong> <strong>JUMP</strong> <strong>▶</strong> to start</p>
       <button class="btn" data-no-input type="button">Start</button>
     `
     this.bindButton()
+    this.overlay.classList.add('visible')
+  }
+
+  showPause(onResume: () => void) {
+    this.panel.innerHTML = `
+      <h1>Paused</h1>
+      <p class="subtitle">Take a breath</p>
+      <button class="btn" data-no-input type="button" id="resume-btn">Resume</button>
+    `
+    const btn = this.panel.querySelector<HTMLButtonElement>('#resume-btn')
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        e.preventDefault()
+        onResume()
+      })
+    }
     this.overlay.classList.add('visible')
   }
 
@@ -153,14 +174,18 @@ export class Hud {
     this.resetCombo()
   }
 
-  showGameOver(finalScore: number, coins: number) {
+  showGameOver(finalScore: number, coins: number, bestScore: number, isNewBest: boolean) {
     if (this.gameOverShown) return
     this.gameOverShown = true
+    const badge = isNewBest
+      ? `<p class="new-best">🏆 New best!</p>`
+      : `<p class="best-score">Best: <strong>${bestScore}</strong></p>`
     this.panel.innerHTML = `
       <h1>Cube Runner</h1>
       <h2>Game Over</h2>
       <p>Final score</p>
       <div class="final">${finalScore}</div>
+      ${badge}
       <p class="stat">Coins: <strong>${coins}</strong></p>
       <p class="start-hint kbd">Press <kbd>R</kbd> to restart</p>
       <p class="start-hint touch">Tap the button or swipe up to restart</p>

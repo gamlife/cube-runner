@@ -13,7 +13,7 @@ import { TouchControls } from './touch-controls'
 import { Powerups, type PowerKind } from './powerups'
 import { THEMES } from './theme'
 
-type State = 'READY' | 'PLAYING' | 'GAME_OVER'
+type State = 'READY' | 'PLAYING' | 'GAME_OVER' | 'PAUSED'
 
 export class Game {
   private ctx!: SceneContext
@@ -48,6 +48,8 @@ export class Game {
   private nextMilestone = 250
   private slowMoTimer = 0
   private timeScale = 1
+  private bestScore = 0
+  private musicEnabled = true
 
   async start() {
     const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -64,7 +66,7 @@ export class Game {
     this.hud = new Hud()
 
     this.hud.onRestartClick(() => {
-      if (this.state === 'GAME_OVER' || this.state === 'READY') this.restart()
+      if (this.state === 'GAME_OVER' || this.state === 'READY' || this.state === 'PAUSED') this.restart()
     })
 
     this.levels = new Levels({
@@ -87,6 +89,19 @@ export class Game {
     this.pickups.setColor(THEMES[0]!.pickupColor)
     this.lastLevelApplied = 0
 
+    // Load best score from localStorage
+    try {
+      const raw = window.localStorage.getItem('cube-runner-best')
+      if (raw) this.bestScore = parseInt(raw, 10) || 0
+    } catch {
+      // ignore (e.g. private mode)
+    }
+
+    this.hud.showStart(this.bestScore)
+    this.hud.setScore(0)
+    this.hud.setSpeed(this.obstacles.getSpeed())
+    this.hud.setCoins(0)
+
     this.disposeInput = bindInput({
       onLeft: () => this.handleMove(-1),
       onRight: () => this.handleMove(1),
@@ -98,6 +113,7 @@ export class Game {
       onRestart: () => {
         if (this.state === 'GAME_OVER') this.restart()
       },
+      onPause: () => this.togglePause(),
     })
 
     if (document.body.classList.contains('touch')) {
@@ -109,13 +125,9 @@ export class Game {
         onRestart: () => {
           if (this.state === 'GAME_OVER') this.restart()
         },
+        onPause: () => this.togglePause(),
       })
     }
-
-    this.hud.showStart()
-    this.hud.setScore(0)
-    this.hud.setSpeed(this.obstacles.getSpeed())
-    this.hud.setCoins(0)
 
     this.lastTs = performance.now()
     this.rafId = requestAnimationFrame(this.tick)
@@ -195,7 +207,29 @@ export class Game {
     this.particles.explode(this.player.group.position.x, 0.6, this.player.group.position.z)
     this.player.hit()
     this.hud.flashHit()
-    this.hud.showGameOver(this.score, this.coins)
+    // Persist best score
+    const isNewBest = this.score > this.bestScore
+    if (isNewBest) {
+      this.bestScore = this.score
+      try {
+        window.localStorage.setItem('cube-runner-best', String(this.bestScore))
+      } catch {
+        // ignore
+      }
+    }
+    this.hud.showGameOver(this.score, this.coins, this.bestScore, isNewBest)
+  }
+
+  private togglePause() {
+    if (this.state === 'PLAYING') {
+      this.state = 'PAUSED'
+      this.audio.stopMusic()
+      this.hud.showPause(() => this.togglePause())
+    } else if (this.state === 'PAUSED') {
+      this.state = 'PLAYING'
+      this.audio.startMusic()
+      this.hud.hide()
+    }
   }
 
   private onLevelChange(newIdx: number) {
@@ -428,5 +462,10 @@ export class Game {
     this.disposeInput?.()
     this.touchControls?.destroy()
     this.audio.stopMusic()
+  }
+
+  setMuted(m: boolean) {
+    this.musicEnabled = !m
+    this.audio.setMusicEnabled(this.musicEnabled)
   }
 }

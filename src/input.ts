@@ -65,6 +65,12 @@ export function bindInput(b: InputBindings): () => void {
   }
 
   const onStart = (e: TouchEvent) => {
+    // If the touch is on a UI control (button, [data-no-input]), let the browser
+    // handle it normally so click events fire. Otherwise call preventDefault to
+    // suppress iOS Safari's double-tap zoom and pull-to-refresh while playing.
+    const target = e.target as HTMLElement | null
+    const isUIControl = !!(target && target.closest('button, [data-no-input]'))
+
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i]
       if (t == null) continue
@@ -76,8 +82,7 @@ export function bindInput(b: InputBindings): () => void {
         target: t.target as HTMLElement,
       })
     }
-    // prevent iOS double-tap zoom / scroll-zoom while playing
-    if (e.cancelable) e.preventDefault()
+    if (!isUIControl && e.cancelable) e.preventDefault()
   }
 
   const onEnd = (e: TouchEvent) => {

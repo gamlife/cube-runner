@@ -134,7 +134,7 @@ export class Game {
   }
 
   private handleMove(dx: -1 | 1) {
-    if (this.state === 'GAME_OVER') return
+    if (this.state === 'GAME_OVER' || this.state === 'PAUSED') return
     this.tryStart()
     if (dx < 0) this.player.moveLeft()
     else this.player.moveRight()
@@ -142,7 +142,7 @@ export class Game {
   }
 
   private handleJump() {
-    if (this.state === 'GAME_OVER') return
+    if (this.state === 'GAME_OVER' || this.state === 'PAUSED') return
     this.tryStart()
     if (this.player.onGround) {
       this.player.jump()

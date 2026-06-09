@@ -10,6 +10,7 @@ import { Audio } from './audio'
 import { bindInput } from './input'
 import { Hud } from './hud'
 import { TouchControls } from './touch-controls'
+import { Powerups, type PowerKind } from './powerups'
 import { THEMES } from './theme'
 
 type State = 'READY' | 'PLAYING' | 'GAME_OVER'
@@ -20,6 +21,7 @@ export class Game {
   private obstacles!: Obstacles
   private enemies!: Enemies
   private pickups!: Pickups
+  private powerups!: Powerups
   private particles!: Particles
   private levels!: Levels
   private audio!: Audio
@@ -41,6 +43,11 @@ export class Game {
   private disposeInput?: () => void
   private hitCooldown = 0
   private lastLevelApplied = -1
+  private magnetTimer = 0
+  private boostTimer = 0
+  private nextMilestone = 250
+  private slowMoTimer = 0
+  private timeScale = 1
 
   async start() {
     const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -50,6 +57,9 @@ export class Game {
     this.enemies = new Enemies(this.ctx.scene, () => this.obstacles.getSpeed())
     this.particles = new Particles(this.ctx.scene)
     this.pickups = new Pickups(this.ctx.scene, (x, y, z) => this.onCoinCollected(x, y, z))
+    this.powerups = new Powerups(this.ctx.scene, (kind, x, y, z) =>
+      this.onPowerupCollected(kind, x, y, z),
+    )
     this.audio = new Audio()
     this.hud = new Hud()
 
@@ -146,10 +156,16 @@ export class Game {
     this.timeInState = 0
     this.totalTime = 0
     this.hitCooldown = 0
+    this.magnetTimer = 0
+    this.boostTimer = 0
+    this.nextMilestone = 250
+    this.slowMoTimer = 0
+    this.timeScale = 1
     this.player.reset()
     this.obstacles.reset()
     this.enemies.reset()
     this.pickups.reset()
+    this.powerups.reset()
     this.particles.update(0) // ensure no leftover
     this.levels.reset()
     applyThemeToScene(this.ctx, THEMES[0]!)
@@ -160,6 +176,7 @@ export class Game {
     this.hud.setCoins(0)
     this.hud.setSpeed(this.obstacles.getSpeed())
     this.hud.resetCombo()
+    this.hud.clearPower()
     this.state = 'PLAYING'
     this.hud.hide()
     this.audio.setMusicTheme(THEMES[0]!.musicRoot, THEMES[0]!.musicScale, 110)
@@ -174,8 +191,10 @@ export class Game {
     this.audio.sfx('hit')
     this.audio.stopMusic()
     this.ctx.shake = 1
+    this.slowMoTimer = 0.5
     this.particles.explode(this.player.group.position.x, 0.6, this.player.group.position.z)
     this.player.hit()
+    this.hud.flashHit()
     this.hud.showGameOver(this.score, this.coins)
   }
 
@@ -189,7 +208,8 @@ export class Game {
 
   private onCoinCollected(x: number, y: number, z: number) {
     const combo = this.hud.getCombo()
-    const bonus = 10 + Math.max(0, combo) * 2
+    const boost = this.boostTimer > 0 ? 2 : 1
+    const bonus = (10 + Math.max(0, combo) * 2) * boost
     this.coins++
     this.dodgeBonus += bonus
     this.hud.setCoins(this.coins)
@@ -204,14 +224,59 @@ export class Game {
     this.hud.showPopup(sx, sy, `+${bonus}`, '#ffd24a')
   }
 
+  private onPowerupCollected(kind: PowerKind, x: number, y: number, z: number) {
+    if (kind === 'shield') {
+      this.player.activateShield(8)
+      this.hud.setPower('shield', 8)
+    } else if (kind === 'magnet') {
+      this.magnetTimer = 7
+      this.hud.setPower('magnet', 7)
+    } else if (kind === 'boost') {
+      this.boostTimer = 5
+      this.hud.setPower('boost', 5)
+    }
+    this.particles.sparkle(x, y, z, 0xffffff, 18)
+    this.audio.sfx('levelup')
+  }
+
+  private celebrateMilestone() {
+    // Burst of confetti particles around the player
+    const px = this.player.group.position.x
+    const pz = this.player.group.position.z
+    const colors = [0xff6a3d, 0x4cc9f0, 0xffd24a, 0xff4ad8, 0x6dd58c]
+    for (let i = 0; i < 5; i++) {
+      const c = colors[i % colors.length]!
+      this.particles.sparkle(px + (Math.random() - 0.5) * 2, 1.2, pz, c, 10)
+    }
+    this.hud.showMilestone(this.score)
+    this.ctx.shake = Math.max(this.ctx.shake, 0.4)
+  }
+
   private tick = (ts: number) => {
     const dt = Math.min((ts - this.lastTs) / 1000, 0.05)
     this.lastTs = ts
 
+    // Slow-mo: when active, scale time down for dramatic effect
+    if (this.slowMoTimer > 0) {
+      this.slowMoTimer = Math.max(0, this.slowMoTimer - dt)
+      this.timeScale = 0.35
+    } else {
+      this.timeScale = 1
+    }
+    const sdt = dt * this.timeScale
+
     if (this.state === 'PLAYING') {
-      this.totalTime += dt
-      this.timeInState += dt
+      this.totalTime += sdt
+      this.timeInState += sdt
       this.hitCooldown = Math.max(0, this.hitCooldown - dt)
+      this.magnetTimer = Math.max(0, this.magnetTimer - dt)
+      this.boostTimer = Math.max(0, this.boostTimer - dt)
+
+      // Update HUD power-up indicator countdown
+      if (this.magnetTimer > 0) this.hud.setPower('magnet', this.magnetTimer, true)
+      else if (this.boostTimer > 0) this.hud.setPower('boost', this.boostTimer, true)
+      else if (this.player.hasShield()) this.hud.setPower('shield', this.player.getShieldTime(), true)
+      else this.hud.clearPower()
 
       // Progress drives speed and difficulty
       const progress = Math.min(1, this.totalTime / 75)
@@ -220,7 +285,7 @@ export class Game {
       this.hud.setSpeed(this.obstacles.getSpeed())
 
       // Level progression + crossfade
-      this.levels.check(this.score, dt)
+      this.levels.check(this.score, sdt)
       const theme = this.levels.getTheme()
       if (this.levels.getLevelIndex() !== this.lastLevelApplied) {
         applyThemeToScene(this.ctx, theme)
@@ -229,27 +294,43 @@ export class Game {
 
       // Distance score (paused during transition)
       if (!this.levels.isPaused()) {
-        this.distance += this.obstacles.getSpeed() * dt
+        this.distance += this.obstacles.getSpeed() * sdt
       }
       const newScore = Math.floor(this.distance) + this.dodgeBonus
       if (newScore !== this.score) {
         this.score = newScore
         this.hud.setScore(this.score)
+        // Milestone check
+        if (this.score >= this.nextMilestone) {
+          this.celebrateMilestone()
+          this.nextMilestone += 250
+        }
       }
 
       // Update entities
-      this.player.update(dt)
+      this.player.update(sdt)
       if (!this.levels.isPaused()) {
-        this.obstacles.update(dt, () => {
+        this.obstacles.update(sdt, () => {
           this.dodgeBonus += 5
         })
-        this.enemies.update(dt)
-        this.pickups.update(dt, this.obstacles.getSpeed())
+        this.enemies.update(sdt)
+        this.pickups.update(sdt, this.obstacles.getSpeed())
+        this.powerups.update(sdt, this.obstacles.getSpeed())
+        // Apply magnet
+        if (this.magnetTimer > 0) {
+          this.pickups.applyMagnet(
+            this.player.group.position.x,
+            this.player.group.position.y,
+            this.player.group.position.z,
+            5,
+            sdt,
+          )
+        }
       }
-      this.ctx.decorations.update(this.obstacles.getSpeed(), dt)
-      this.ctx.parallax.update(dt)
-      this.ctx.sky.update(dt)
-      this.particles.update(dt)
+      this.ctx.decorations.update(this.obstacles.getSpeed() * sdt, sdt)
+      this.ctx.parallax.update(sdt)
+      this.ctx.sky.update(sdt)
+      this.particles.update(sdt)
 
       // Camera shake decay
       this.ctx.shake = Math.max(0, this.ctx.shake - dt * 1.5)
@@ -258,34 +339,65 @@ export class Game {
       this.player.getHitBox(this.playerBox)
       if (this.hitCooldown === 0) {
         if (this.obstacles.checkCollision(this.playerBox)) {
-          this.endGame()
+          if (this.player.consumeShield()) {
+            // Shield absorbs hit, brief invuln
+            this.hitCooldown = 0.5
+            this.ctx.shake = 0.5
+            this.audio.sfx('coin')
+            this.particles.sparkle(
+              this.player.group.position.x,
+              1,
+              this.player.group.position.z,
+              0x4cc9f0,
+              16,
+            )
+            this.player.hitFlash = 0.4
+            this.hud.clearPower()
+          } else {
+            this.endGame()
+          }
         } else {
           // Enemy car collisions
           this.enemies.getActiveBoxes(this.enemyBoxes)
+          let hit = false
           for (let i = 0; i < this.enemyBoxes.length; i++) {
             if (this.playerBox.intersectsBox(this.enemyBoxes[i]!)) {
-              this.endGame()
+              hit = true
               break
+            }
+          }
+          if (hit) {
+            if (this.player.consumeShield()) {
+              this.hitCooldown = 0.5
+              this.ctx.shake = 0.5
+              this.audio.sfx('coin')
+              this.particles.sparkle(
+                this.player.group.position.x,
+                1,
+                this.player.group.position.z,
+                0x4cc9f0,
+                16,
+              )
+              this.player.hitFlash = 0.4
+              this.hud.clearPower()
+            } else {
+              this.endGame()
             }
           }
         }
       }
 
-      // Coin pickup
+      // Pickups
       if (this.state === 'PLAYING') {
         this.pickups.checkCollection(this.playerBox)
+        this.powerups.checkCollection(this.playerBox)
       }
-
-      // Landing dust
-      const wasInAir = !this.player.onGround
-      // (jump is handled in player; we use the squash as the cue)
-      void wasInAir
     } else if (this.state === 'GAME_OVER') {
-      this.player.update(dt)
-      this.particles.update(dt)
+      this.player.update(sdt)
+      this.particles.update(sdt)
       this.ctx.shake = Math.max(0, this.ctx.shake - dt * 1.5)
     } else {
-      this.player.update(dt)
+      this.player.update(sdt)
     }
 
     // Camera follow with X lag (parallax)

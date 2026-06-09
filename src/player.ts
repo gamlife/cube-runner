@@ -28,6 +28,10 @@ export class Player {
   private readonly trailGroup: THREE.Group
   private trailIndex = 0
   private readonly trailDots: THREE.Mesh[] = []
+  /** Shield ring around the player (visible when active). */
+  private readonly shieldRing: THREE.Mesh
+  private shieldActive = false
+  private shieldTimer = 0
 
   private laneIndex = 1
   private vy = 0
@@ -109,6 +113,18 @@ export class Player {
     }
     this.group.add(this.trailGroup)
 
+    // Shield ring (hidden until active)
+    const shieldGeom = new THREE.RingGeometry(0.6, 0.7, 24)
+    const shieldMat = new THREE.MeshBasicMaterial({
+      color: 0x4cc9f0,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+    })
+    this.shieldRing = new THREE.Mesh(shieldGeom, shieldMat)
+    this.shieldRing.visible = false
+    this.group.add(this.shieldRing)
+
     this.group.position.set(LANE_X[this.laneIndex] as number, PLAYER_GROUND_Y, 0)
   }
 
@@ -137,6 +153,30 @@ export class Player {
   hit() {
     this.hitFlash = 1
     this.spinOut = 1
+  }
+
+  /** Activate shield. While active, hits are absorbed and the player is not killed. */
+  activateShield(duration: number) {
+    this.shieldActive = true
+    this.shieldTimer = duration
+    this.shieldRing.visible = true
+  }
+
+  /** Consume the shield (return whether it was active). */
+  consumeShield(): boolean {
+    if (!this.shieldActive) return false
+    this.shieldActive = false
+    this.shieldTimer = 0
+    this.shieldRing.visible = false
+    return true
+  }
+
+  hasShield(): boolean {
+    return this.shieldActive
+  }
+
+  getShieldTime(): number {
+    return this.shieldTimer
   }
 
   reset() {
@@ -235,6 +275,25 @@ export class Player {
 
     // Antenna bob
     this.antennaTip.position.y = 0.88 + Math.sin(this.timeInState * 6) * 0.04
+
+    // Shield ring (counter-rotate, pulse)
+    if (this.shieldActive) {
+      this.shieldTimer -= dt
+      if (this.shieldTimer <= 0) {
+        this.shieldActive = false
+        this.shieldRing.visible = false
+      } else {
+        this.shieldRing.rotation.z -= dt * 2
+        const pulse = 0.4 + 0.3 * Math.sin(this.timeInState * 8)
+        ;(this.shieldRing.material as THREE.MeshBasicMaterial).opacity = pulse
+        // warn when about to expire
+        if (this.shieldTimer < 1.5) {
+          ;(this.shieldRing.material as THREE.MeshBasicMaterial).color.setHex(
+            0xff5a3a,
+          )
+        }
+      }
+    }
   }
 
   getLaneIndex(): number {

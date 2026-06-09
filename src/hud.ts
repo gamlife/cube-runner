@@ -9,10 +9,16 @@ export class Hud {
   private readonly coinEl: HTMLElement
   private readonly coinValue: HTMLElement
   private readonly comboEl: HTMLElement
+  private readonly powerEl: HTMLElement
+  private readonly powerName: HTMLElement
+  private readonly powerTime: HTMLElement
+  private readonly flashEl: HTMLElement
+  private readonly milestoneEl: HTMLElement
   private gameOverShown = false
   private restartHandler: (() => void) | null = null
   private comboCount = 0
   private comboTimer: number | null = null
+  private currentPower: string | null = null
 
   constructor() {
     this.scoreEl = document.getElementById('score-value') as HTMLElement
@@ -25,6 +31,11 @@ export class Hud {
     this.coinEl = document.getElementById('coin-counter') as HTMLElement
     this.coinValue = document.getElementById('coin-value') as HTMLElement
     this.comboEl = document.getElementById('combo') as HTMLElement
+    this.powerEl = document.getElementById('power-indicator') as HTMLElement
+    this.powerName = document.getElementById('power-name') as HTMLElement
+    this.powerTime = document.getElementById('power-time') as HTMLElement
+    this.flashEl = document.getElementById('hit-flash') as HTMLElement
+    this.milestoneEl = document.getElementById('milestone') as HTMLElement
   }
 
   setScore(n: number) {
@@ -64,6 +75,39 @@ export class Hud {
 
   getCombo(): number {
     return this.comboCount
+  }
+
+  setPower(kind: 'shield' | 'magnet' | 'boost', duration: number, ticking = false) {
+    const label = kind.toUpperCase()
+    if (this.currentPower !== kind) {
+      this.currentPower = kind
+      this.powerName.textContent = label
+      this.powerEl.className = `visible power-${kind}`
+    }
+    this.powerTime.textContent = ticking ? `${duration.toFixed(1)}s` : `${duration.toFixed(0)}s`
+  }
+
+  clearPower() {
+    if (this.currentPower === null) return
+    this.currentPower = null
+    this.powerEl.className = ''
+    this.powerName.textContent = ''
+    this.powerTime.textContent = ''
+  }
+
+  flashHit() {
+    this.flashEl.classList.remove('show')
+    void this.flashEl.offsetWidth
+    this.flashEl.classList.add('show')
+    window.setTimeout(() => this.flashEl.classList.remove('show'), 400)
+  }
+
+  showMilestone(score: number) {
+    this.milestoneEl.textContent = `MILESTONE · ${score}`
+    this.milestoneEl.classList.remove('show')
+    void this.milestoneEl.offsetWidth
+    this.milestoneEl.classList.add('show')
+    window.setTimeout(() => this.milestoneEl.classList.remove('show'), 1200)
   }
 
   /** Show a floating "+N" popup at the given screen coordinates (0..1, 0..1). */

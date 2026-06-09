@@ -96,6 +96,24 @@ export class Pickups {
     }
   }
 
+  /** Pull active coins toward a target point (magnet effect). */
+  applyMagnet(tx: number, ty: number, tz: number, range: number, dt: number) {
+    for (const e of this.pool) {
+      if (!e.active || e.scored) continue
+      const p = e.mesh.position
+      const dx = tx - p.x
+      const dy = ty - p.y
+      const dz = tz - p.z
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (d < range && d > 0.1) {
+        const f = 12 * dt * (1 - d / range) // stronger the closer
+        p.x += (dx / d) * f
+        p.y += (dy / d) * f
+        p.z += (dz / d) * f
+      }
+    }
+  }
+
   /** Returns the number of coins collected this call. */
   checkCollection(playerBox: THREE.Box3): number {
     let collected = 0

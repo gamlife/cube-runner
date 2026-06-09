@@ -157,28 +157,42 @@ export function levelForScore(score: number): number {
   return Math.min(idx, THEMES.length - 1)
 }
 
+/** Lerp two 0xRRGGBB hex colors by interpolating R/G/B channels separately. */
+function lerpColorHex(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff
+  const ag = (a >> 8) & 0xff
+  const ab = a & 0xff
+  const br = (b >> 16) & 0xff
+  const bg = (b >> 8) & 0xff
+  const bb = b & 0xff
+  const r = Math.round(ar + (br - ar) * t)
+  const g = Math.round(ag + (bg - ag) * t)
+  const bl = Math.round(ab + (bb - ab) * t)
+  return (r << 16) | (g << 8) | bl
+}
+
 /** Lerp between two themes. t in [0,1] */
 export function lerpTheme(a: Theme, b: Theme, t: number, out: Theme): Theme {
-  out.skyTop = THREE.MathUtils.lerp(a.skyTop, b.skyTop, t)
-  out.skyBottom = THREE.MathUtils.lerp(a.skyBottom, b.skyBottom, t)
-  out.sunColor = THREE.MathUtils.lerp(a.sunColor, b.sunColor, t)
+  out.skyTop = lerpColorHex(a.skyTop, b.skyTop, t)
+  out.skyBottom = lerpColorHex(a.skyBottom, b.skyBottom, t)
+  out.sunColor = lerpColorHex(a.sunColor, b.sunColor, t)
   out.sunIntensity = THREE.MathUtils.lerp(a.sunIntensity, b.sunIntensity, t)
-  out.cloudColor = THREE.MathUtils.lerp(a.cloudColor, b.cloudColor, t)
+  out.cloudColor = lerpColorHex(a.cloudColor, b.cloudColor, t)
   out.cloudOpacity = THREE.MathUtils.lerp(a.cloudOpacity, b.cloudOpacity, t)
-  out.mountainNear = THREE.MathUtils.lerp(a.mountainNear, b.mountainNear, t)
-  out.mountainFar = THREE.MathUtils.lerp(a.mountainFar, b.mountainFar, t)
-  out.groundColor = THREE.MathUtils.lerp(a.groundColor, b.groundColor, t)
-  out.groundAccent = THREE.MathUtils.lerp(a.groundAccent, b.groundAccent, t)
-  out.roadColor = THREE.MathUtils.lerp(a.roadColor, b.roadColor, t)
-  out.roadLineColor = THREE.MathUtils.lerp(a.roadLineColor, b.roadLineColor, t)
-  out.curbColor = THREE.MathUtils.lerp(a.curbColor, b.curbColor, t)
-  out.ambientColor = THREE.MathUtils.lerp(a.ambientColor, b.ambientColor, t)
+  out.mountainNear = lerpColorHex(a.mountainNear, b.mountainNear, t)
+  out.mountainFar = lerpColorHex(a.mountainFar, b.mountainFar, t)
+  out.groundColor = lerpColorHex(a.groundColor, b.groundColor, t)
+  out.groundAccent = lerpColorHex(a.groundAccent, b.groundAccent, t)
+  out.roadColor = lerpColorHex(a.roadColor, b.roadColor, t)
+  out.roadLineColor = lerpColorHex(a.roadLineColor, b.roadLineColor, t)
+  out.curbColor = lerpColorHex(a.curbColor, b.curbColor, t)
+  out.ambientColor = lerpColorHex(a.ambientColor, b.ambientColor, t)
   out.ambientIntensity = THREE.MathUtils.lerp(a.ambientIntensity, b.ambientIntensity, t)
-  out.dirColor = THREE.MathUtils.lerp(a.dirColor, b.dirColor, t)
+  out.dirColor = lerpColorHex(a.dirColor, b.dirColor, t)
   out.dirIntensity = THREE.MathUtils.lerp(a.dirIntensity, b.dirIntensity, t)
-  out.fogColor = THREE.MathUtils.lerp(a.fogColor, b.fogColor, t)
+  out.fogColor = lerpColorHex(a.fogColor, b.fogColor, t)
   out.fogNear = THREE.MathUtils.lerp(a.fogNear, b.fogNear, t)
   out.fogFar = THREE.MathUtils.lerp(a.fogFar, b.fogFar, t)
-  out.pickupColor = THREE.MathUtils.lerp(a.pickupColor, b.pickupColor, t)
+  out.pickupColor = lerpColorHex(a.pickupColor, b.pickupColor, t)
   return out
 }

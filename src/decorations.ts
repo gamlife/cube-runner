@@ -24,9 +24,18 @@ export class Decorations {
   }
 
   setType(type: 'trees' | 'lamps' | 'neon') {
+    // Lazy type change: just update the field. Items in the pool keep their
+    // current visual; new items spawned during update() use the new type, so
+    // the world morphs gradually as items scroll off-screen. This avoids the
+    // single-frame hitch that would come from wiping and recreating ~60
+    // decoration objects (each with 4-5 meshes + 1 point light + materials)
+    // in one frame when the level transitions.
     if (this.type === type) return
     this.type = type
-    // Wipe existing pool
+  }
+
+  /** Wipe all decorations and reset the pool. Call on game restart. */
+  reset() {
     while (this.group.children.length) {
       const c = this.group.children[0] as THREE.Object3D
       this.group.remove(c)

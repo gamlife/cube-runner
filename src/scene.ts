@@ -92,24 +92,52 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   }
 }
 
+// Scratch Color objects reused across applyThemeToScene calls to avoid
+// per-transition allocations (which would otherwise spike GC and hitch the frame).
+const _scratchBg = new THREE.Color()
+const _scratchFog = new THREE.Color()
+const _scratchAmb = new THREE.Color()
+const _scratchDir = new THREE.Color()
+const _scratchHemi = new THREE.Color()
+const _scratchGround = new THREE.Color()
+
 /** Apply a theme's palette to all scene sub-systems. */
 export function applyThemeToScene(ctx: SceneContext, theme: Theme) {
-  ctx.scene.background = new THREE.Color(theme.skyBottom)
-  ctx.scene.fog = new THREE.Fog(theme.fogColor, theme.fogNear, theme.fogFar)
+  // Reuse existing fog and background objects; only update their values.
+  // Replacing them every call triggers uniform re-uploads and triggers GC pressure.
+  if (!ctx.scene.background) {
+    ctx.scene.background = new THREE.Color(theme.skyBottom)
+  } else {
+    _scratchBg.setHex(theme.skyBottom)
+    ;(ctx.scene.background as THREE.Color).copy(_scratchBg)
+  }
+  if (!ctx.scene.fog) {
+    ctx.scene.fog = new THREE.Fog(theme.fogColor, theme.fogNear, theme.fogFar)
+  } else {
+    const fog = ctx.scene.fog as THREE.Fog
+    _scratchFog.setHex(theme.fogColor)
+    fog.color.copy(_scratchFog)
+    fog.near = theme.fogNear
+    fog.far = theme.fogFar
+  }
   const amb = (ctx.scene as unknown as { __ambient: THREE.AmbientLight }).__ambient
   const dir = (ctx.scene as unknown as { __dir: THREE.DirectionalLight }).__dir
   const hemi = (ctx.scene as unknown as { __hemi: THREE.HemisphereLight }).__hemi
   if (amb) {
-    amb.color = new THREE.Color(theme.ambientColor)
+    _scratchAmb.setHex(theme.ambientColor)
+    amb.color.copy(_scratchAmb)
     amb.intensity = theme.ambientIntensity
   }
   if (dir) {
-    dir.color = new THREE.Color(theme.dirColor)
+    _scratchDir.setHex(theme.dirColor)
+    dir.color.copy(_scratchDir)
     dir.intensity = theme.dirIntensity
   }
   if (hemi) {
-    hemi.color = new THREE.Color(theme.ambientColor)
-    hemi.groundColor = new THREE.Color(theme.groundColor)
+    _scratchHemi.setHex(theme.ambientColor)
+    hemi.color.copy(_scratchHemi)
+    _scratchGround.setHex(theme.groundColor)
+    hemi.groundColor.copy(_scratchGround)
   }
   ctx.sky.applyTheme(theme)
   ctx.parallax.applyTheme(theme)

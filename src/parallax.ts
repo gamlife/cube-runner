@@ -14,6 +14,10 @@ export class Parallax {
     speed: number
     tileWidth: number
   }> = []
+  // Scratch Color objects reused in applyTheme to avoid per-call allocations.
+  private readonly _farColor = new THREE.Color()
+  private readonly _nearColor = new THREE.Color()
+  private readonly _treeColor = new THREE.Color()
 
   constructor() {
     this.group = new THREE.Group()
@@ -64,14 +68,14 @@ export class Parallax {
   }
 
   applyTheme(theme: { mountainNear: number; mountainFar: number }) {
-    if (this.layers[0])
-      (this.layers[0].mat as THREE.MeshBasicMaterial).color = new THREE.Color(theme.mountainFar)
-    if (this.layers[1])
-      (this.layers[1].mat as THREE.MeshBasicMaterial).color = new THREE.Color(theme.mountainNear)
+    this._farColor.setHex(theme.mountainFar)
+    this._nearColor.setHex(theme.mountainNear)
+    if (this.layers[0]) this.layers[0].mat.color.copy(this._farColor)
+    if (this.layers[1]) this.layers[1].mat.color.copy(this._nearColor)
     if (this.layers[2]) {
       // tree line is a darker version of mountainNear
-      const c = new THREE.Color(theme.mountainNear).multiplyScalar(0.65)
-      ;(this.layers[2].mat as THREE.MeshBasicMaterial).color = c
+      this._treeColor.copy(this._nearColor).multiplyScalar(0.65)
+      this.layers[2].mat.color.copy(this._treeColor)
     }
   }
 

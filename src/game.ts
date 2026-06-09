@@ -179,6 +179,7 @@ export class Game {
     this.pickups.reset()
     this.powerups.reset()
     this.particles.update(0) // ensure no leftover
+    this.ctx.decorations.reset()
     this.levels.reset()
     applyThemeToScene(this.ctx, THEMES[0]!)
     this.obstacles.setPalette(THEMES[0]!.obstaclePalette)

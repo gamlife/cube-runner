@@ -105,6 +105,11 @@ export class Sky {
   // Cache to expose to the applyTheme method without TS complaints about field shadowing.
   private sunMat = new THREE.MeshBasicMaterial()
   private haloMat = new THREE.MeshBasicMaterial()
+  // Scratch Color objects reused in applyTheme to avoid per-call allocations.
+  private readonly _topColor = new THREE.Color()
+  private readonly _bottomColor = new THREE.Color()
+  private readonly _sunColor = new THREE.Color()
+  private readonly _cloudColor = new THREE.Color()
 
   applyTheme(theme: {
     skyTop: number
@@ -114,17 +119,18 @@ export class Sky {
     cloudColor: number
     cloudOpacity: number
   }) {
-    const top = new THREE.Color(theme.skyTop)
-    const bottom = new THREE.Color(theme.skyBottom)
-    ;(this.skyMat.uniforms.topColor.value as THREE.Color).copy(top)
-    ;(this.skyMat.uniforms.bottomColor.value as THREE.Color).copy(bottom)
-    const sun = new THREE.Color(theme.sunColor)
-    this.sunMat.color.copy(sun)
-    this.haloMat.color.copy(sun)
+    this._topColor.setHex(theme.skyTop)
+    this._bottomColor.setHex(theme.skyBottom)
+    ;(this.skyMat.uniforms.topColor.value as THREE.Color).copy(this._topColor)
+    ;(this.skyMat.uniforms.bottomColor.value as THREE.Color).copy(this._bottomColor)
+    this._sunColor.setHex(theme.sunColor)
+    this.sunMat.color.copy(this._sunColor)
+    this.haloMat.color.copy(this._sunColor)
     this.sunMat.opacity = 0.6 + theme.sunIntensity * 0.3
     this.haloMat.opacity = 0.15 + theme.sunIntensity * 0.15
+    this._cloudColor.setHex(theme.cloudColor)
     for (const c of this.cloudLayers) {
-      c.mat.color = new THREE.Color(theme.cloudColor)
+      c.mat.color.copy(this._cloudColor)
       c.mat.opacity = theme.cloudOpacity
     }
   }

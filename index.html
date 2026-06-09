@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0b0b1a" />
     <title>Cube Runner</title>
     <style>
       :root {
@@ -13,26 +19,65 @@
         --muted: #8a8aa3;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
-      #game { display: block; width: 100vw; height: 100vh; }
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        /* Block iOS Safari pinch / double-tap zoom, pull-to-refresh, and overscroll */
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-touch-callout: none;
+      }
+      #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
       #hud { position: fixed; inset: 0; pointer-events: none; }
-      #score { position: absolute; top: 24px; left: 24px; font-size: 18px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #score { position: absolute; top: max(24px, env(safe-area-inset-top, 24px)); left: 24px; font-size: 18px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
       #score .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
       #score .value { font-size: 32px; font-variant-numeric: tabular-nums; color: var(--accent); }
-      #speed { position: absolute; top: 24px; right: 24px; text-align: right; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #speed { position: absolute; top: max(24px, env(safe-area-inset-top, 24px)); right: 24px; text-align: right; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
       #speed .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
       #speed .value { font-size: 18px; font-variant-numeric: tabular-nums; }
-      #help { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #help { position: absolute; bottom: max(24px, env(safe-area-inset-bottom, 24px)); left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.6); max-width: 90vw; }
       #help kbd { display: inline-block; padding: 2px 6px; margin: 0 2px; border: 1px solid rgba(255,255,255,0.18); border-radius: 4px; font-family: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.04); }
+      #help .touch-hint { display: none; }
+      body.touch #help .kbd-hint { display: none; }
+      body.touch #help .touch-hint { display: inline; }
       #overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(11, 11, 26, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
       #overlay.visible { display: flex; }
-      .panel { text-align: center; padding: 32px 48px; }
+      .panel { text-align: center; padding: 32px 48px; max-width: 92vw; }
       .panel h1 { font-size: 48px; font-weight: 700; letter-spacing: -1px; margin-bottom: 8px; background: linear-gradient(135deg, var(--accent) 0%, #f72585 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
       .panel h2 { font-size: 22px; font-weight: 600; color: var(--danger); margin-bottom: 24px; }
       .panel p { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
       .panel .final { font-size: 56px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); margin: 16px 0 24px; }
       .panel .start-hint { font-size: 13px; color: var(--muted); margin-top: 16px; }
       .panel .start-hint kbd { display: inline-block; padding: 4px 10px; margin: 0 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-family: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.06); }
+      .panel .start-hint.touch { display: none; }
+      body.touch .panel .start-hint.kbd { display: none; }
+      body.touch .panel .start-hint.touch { display: block; }
+      .btn {
+        display: inline-block;
+        pointer-events: auto;
+        margin-top: 8px;
+        padding: 14px 28px;
+        font-size: 16px;
+        font-weight: 600;
+        font-family: inherit;
+        color: var(--bg);
+        background: linear-gradient(135deg, var(--accent) 0%, #f72585 100%);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        box-shadow: 0 4px 18px rgba(76, 201, 240, 0.3);
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      .btn:active { transform: scale(0.96); box-shadow: 0 2px 10px rgba(76, 201, 240, 0.2); }
     </style>
   </head>
   <body>
@@ -47,17 +92,35 @@
         <span class="value"><span id="speed-value">12</span> u/s</span>
       </div>
       <div id="help">
-        <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to switch lanes &nbsp;·&nbsp;
-        <kbd>Space</kbd> to jump &nbsp;·&nbsp;
-        <kbd>R</kbd> to restart
+        <span class="kbd-hint">
+          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd> to switch lanes &nbsp;&middot;&nbsp;
+          <kbd>Space</kbd> to jump &nbsp;&middot;&nbsp;
+          <kbd>R</kbd> to restart
+        </span>
+        <span class="touch-hint">
+          Tap <strong>left / right</strong> to switch lanes &nbsp;&middot;&nbsp;
+          Tap <strong>center</strong> or swipe up to jump
+        </span>
       </div>
       <div id="overlay">
         <div class="panel" id="panel">
           <h1>Cube Runner</h1>
-          <p class="start-hint">Press <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to start</p>
+          <p class="start-hint kbd">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd> to start</p>
+          <p class="start-hint touch">Tap left / right to start, or tap center to jump</p>
         </div>
       </div>
     </div>
+    <script>
+      // Detect touch device and toggle body class so the UI can show the right hint.
+      (function () {
+        var isTouch =
+          'ontouchstart' in window ||
+          (navigator.maxTouchPoints != null && navigator.maxTouchPoints > 0) ||
+          // iPad reports as Mac with touch screen - detect pointer coarse
+          (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+        if (isTouch) document.body.classList.add('touch')
+      })()
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

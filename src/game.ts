@@ -29,6 +29,9 @@ export class Game {
     this.player = new Player()
     this.obstacles = new Obstacles(this.ctx.scene)
     this.hud = new Hud()
+    this.hud.onRestartClick(() => {
+      if (this.state === 'GAME_OVER' || this.state === 'READY') this.restart()
+    })
 
     this.ctx.scene.add(this.player.mesh)
 

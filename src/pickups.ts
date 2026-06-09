@@ -1,0 +1,134 @@
+import * as THREE from 'three'
+import { LANE_X } from './player'
+
+const SPAWN_Z = -60
+const DESPAWN_Z = 8
+const POOL_SIZE = 24
+
+interface CoinEntry {
+  mesh: THREE.Mesh
+  active: boolean
+  lane: number
+  scored: boolean
+  spinSpeed: number
+  phase: number
+}
+
+/**
+ * Coin pickups. They spin in place, move toward the player with the world,
+ * and are collected when the player's AABB overlaps one.
+ */
+export class Pickups {
+  private readonly pool: CoinEntry[] = []
+  private cooldown = 0
+  private readonly geom: THREE.CylinderGeometry
+  private baseColor = 0xffd24a
+  private readonly hitBoxes: THREE.Box3[] = []
+  // pending pickups to consume (positions for sparkle)
+  private readonly onCollect: (x: number, y: number, z: number) => void
+
+  constructor(
+    scene: THREE.Scene,
+    onCollect: (x: number, y: number, z: number) => void,
+  ) {
+    this.onCollect = onCollect
+    // Coin: thin cylinder, rotated so the flat face shows forward
+    this.geom = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 18)
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: this.baseColor,
+        metalness: 0.95,
+        roughness: 0.15,
+        emissive: this.baseColor,
+        emissiveIntensity: 0.35,
+      })
+      const mesh = new THREE.Mesh(this.geom, mat)
+      mesh.rotation.z = Math.PI / 2 // flat face toward camera
+      mesh.visible = false
+      scene.add(mesh)
+      this.pool.push({
+        mesh,
+        active: false,
+        lane: 1,
+        scored: false,
+        spinSpeed: 2 + Math.random() * 2,
+        phase: Math.random() * Math.PI * 2,
+      })
+    }
+    this.cooldown = 0.5
+  }
+
+  setColor(color: number) {
+    this.baseColor = color
+    for (const e of this.pool) {
+      const m = e.mesh.material as THREE.MeshStandardMaterial
+      m.color.setHex(color)
+      m.emissive.setHex(color)
+    }
+  }
+
+  reset() {
+    for (const e of this.pool) {
+      e.active = false
+      e.mesh.visible = false
+      e.scored = false
+    }
+    this.cooldown = 0.5
+  }
+
+  update(dt: number, speed: number) {
+    for (const e of this.pool) {
+      if (!e.active) continue
+      e.mesh.position.z += speed * dt
+      e.mesh.rotation.y += e.spinSpeed * dt
+      // bob
+      e.phase += dt * 3
+      e.mesh.position.y = 1.0 + Math.sin(e.phase) * 0.1
+      if (e.mesh.position.z > DESPAWN_Z) {
+        e.active = false
+        e.mesh.visible = false
+      }
+    }
+    this.cooldown -= dt
+    if (this.cooldown <= 0) {
+      this.spawnGroup()
+      this.cooldown = 0.9 + Math.random() * 1.4
+    }
+  }
+
+  /** Returns the number of coins collected this call. */
+  checkCollection(playerBox: THREE.Box3): number {
+    let collected = 0
+    for (const e of this.pool) {
+      if (!e.active || e.scored) continue
+      const m = e.mesh
+      this.hitBoxes[0] = new THREE.Box3().setFromObject(m)
+      this.hitBoxes[0].expandByScalar(-0.1)
+      if (playerBox.intersectsBox(this.hitBoxes[0]!)) {
+        e.scored = true
+        e.active = false
+        e.mesh.visible = false
+        this.onCollect(m.position.x, m.position.y, m.position.z)
+        collected++
+      }
+    }
+    return collected
+  }
+
+  /** Spawn a small line of 3-5 coins in one lane. */
+  private spawnGroup() {
+    const lane = Math.floor(Math.random() * 3)
+    const count = 3 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < count; i++) this.spawnOne(lane, i)
+  }
+
+  private spawnOne(lane: number, idx: number) {
+    const slot = this.pool.find((e) => !e.active)
+    if (!slot) return
+    slot.lane = lane
+    slot.scored = false
+    slot.mesh.position.set(LANE_X[lane]!, 1.0, SPAWN_Z - idx * 1.4)
+    slot.mesh.visible = true
+    slot.active = true
+  }
+}

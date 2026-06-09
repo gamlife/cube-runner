@@ -14,7 +14,8 @@
       :root {
         --bg: #0b0b1a;
         --accent: #4cc9f0;
-        --danger: #f72585;
+        --accent-2: #f72585;
+        --gold: #ffd24a;
         --text: #f2f2f5;
         --muted: #8a8aa3;
       }
@@ -29,57 +30,229 @@
         -webkit-user-select: none;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
-        /* Block iOS Safari pinch / double-tap zoom, pull-to-refresh, and overscroll */
         touch-action: none;
         overscroll-behavior: none;
         -webkit-touch-callout: none;
       }
       #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
       #hud { position: fixed; inset: 0; pointer-events: none; }
-      #score { position: absolute; top: max(24px, env(safe-area-inset-top, 24px)); left: 24px; font-size: 18px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
-      #score .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
-      #score .value { font-size: 32px; font-variant-numeric: tabular-nums; color: var(--accent); }
-      #speed { position: absolute; top: max(24px, env(safe-area-inset-top, 24px)); right: 24px; text-align: right; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
-      #speed .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
-      #speed .value { font-size: 18px; font-variant-numeric: tabular-nums; }
-      #help { position: absolute; bottom: max(24px, env(safe-area-inset-bottom, 24px)); left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.6); max-width: 90vw; }
-      #help kbd { display: inline-block; padding: 2px 6px; margin: 0 2px; border: 1px solid rgba(255,255,255,0.18); border-radius: 4px; font-family: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.04); }
+
+      /* ----- Score / Speed (top corners) ----- */
+      #score {
+        position: absolute;
+        top: max(20px, env(safe-area-inset-top, 20px));
+        left: 20px;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+      }
+      #score .label, #speed .label, #coin-counter .label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 2.5px;
+        display: block;
+        margin-bottom: 2px;
+      }
+      #score .value { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+      #speed {
+        position: absolute;
+        top: max(20px, env(safe-area-inset-top, 20px));
+        right: 20px;
+        text-align: right;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+      }
+      #speed .value { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+      /* ----- Coin counter (top center) ----- */
+      #coin-counter {
+        position: absolute;
+        top: max(20px, env(safe-area-inset-top, 20px));
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+      }
+      #coin-counter .value {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--gold);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      #coin-counter .value::before {
+        content: '';
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #fff7b0 0%, var(--gold) 50%, #b5801f 100%);
+        box-shadow: 0 0 6px rgba(255, 210, 74, 0.7);
+      }
+      #coin-counter.bump .value { animation: coin-bump 0.2s ease-out; }
+      @keyframes coin-bump { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
+
+      /* ----- Combo ----- */
+      #combo {
+        position: absolute;
+        top: 64px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        color: var(--gold);
+        text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      #combo.visible { opacity: 1; animation: combo-pop 0.3s ease-out; }
+      @keyframes combo-pop { 0% { transform: translateX(-50%) scale(0.5); } 60% { transform: translateX(-50%) scale(1.1); } 100% { transform: translateX(-50%) scale(1); } }
+
+      /* ----- Level banner ----- */
+      #level-banner {
+        position: absolute;
+        top: 32%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.8);
+        text-align: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.4s, transform 0.4s;
+      }
+      #level-banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      #level-banner .tag {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 4px;
+        color: var(--muted);
+        text-transform: uppercase;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+        margin-bottom: 4px;
+      }
+      #level-banner .name {
+        font-size: 44px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 4px 24px rgba(0,0,0,0.4);
+      }
+
+      /* ----- Help / hint ----- */
+      #help {
+        position: absolute;
+        bottom: max(24px, env(safe-area-inset-bottom, 24px));
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 12px;
+        color: var(--muted);
+        text-align: center;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+        max-width: 90vw;
+      }
+      #help kbd {
+        display: inline-block;
+        padding: 2px 6px;
+        margin: 0 2px;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 4px;
+        font-family: inherit;
+        font-size: 11px;
+        color: var(--text);
+        background: rgba(255,255,255,0.04);
+      }
       #help .touch-hint { display: none; }
       body.touch #help .kbd-hint { display: none; }
       body.touch #help .touch-hint { display: inline; }
-      #overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(11, 11, 26, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+      /* ----- Overlay (start / game over) ----- */
+      #overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(11, 11, 26, 0.78);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+      }
       #overlay.visible { display: flex; }
-      .panel { text-align: center; padding: 32px 48px; max-width: 92vw; }
-      .panel h1 { font-size: 48px; font-weight: 700; letter-spacing: -1px; margin-bottom: 8px; background: linear-gradient(135deg, var(--accent) 0%, #f72585 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-      .panel h2 { font-size: 22px; font-weight: 600; color: var(--danger); margin-bottom: 24px; }
-      .panel p { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
-      .panel .final { font-size: 56px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); margin: 16px 0 24px; }
+      .panel {
+        text-align: center;
+        padding: 36px 48px;
+        max-width: 92vw;
+        animation: panel-in 0.4s ease-out;
+      }
+      @keyframes panel-in {
+        from { opacity: 0; transform: translateY(20px) scale(0.95); }
+        to { opacity: 1; transform: none; }
+      }
+      .panel h1 {
+        font-size: 52px;
+        font-weight: 800;
+        letter-spacing: -1.5px;
+        margin-bottom: 4px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .panel .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 24px; letter-spacing: 1.5px; text-transform: uppercase; }
+      .panel h2 { font-size: 22px; font-weight: 600; color: var(--accent-2); margin-bottom: 18px; }
+      .panel p { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+      .panel .stat { font-size: 14px; color: var(--text); margin-bottom: 18px; }
+      .panel .stat strong { color: var(--gold); }
+      .panel .final {
+        font-size: 60px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        margin: 12px 0 18px;
+      }
       .panel .start-hint { font-size: 13px; color: var(--muted); margin-top: 16px; }
-      .panel .start-hint kbd { display: inline-block; padding: 4px 10px; margin: 0 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-family: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.06); }
+      .panel .start-hint kbd {
+        display: inline-block;
+        padding: 4px 10px;
+        margin: 0 4px;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: rgba(255,255,255,0.06);
+      }
       .panel .start-hint.touch { display: none; }
       body.touch .panel .start-hint.kbd { display: none; }
       body.touch .panel .start-hint.touch { display: block; }
+
       .btn {
         display: inline-block;
         pointer-events: auto;
-        margin-top: 8px;
-        padding: 14px 28px;
+        margin-top: 12px;
+        padding: 16px 36px;
         font-size: 16px;
-        font-weight: 600;
+        font-weight: 700;
         font-family: inherit;
-        color: var(--bg);
-        background: linear-gradient(135deg, var(--accent) 0%, #f72585 100%);
+        color: #0b0b1a;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
         border: none;
-        border-radius: 12px;
+        border-radius: 14px;
         cursor: pointer;
-        box-shadow: 0 4px 18px rgba(76, 201, 240, 0.3);
-        transition: transform 0.1s ease, box-shadow 0.1s ease;
+        box-shadow: 0 4px 24px rgba(76, 201, 240, 0.35), 0 0 0 1px rgba(255,255,255,0.08) inset;
+        transition: transform 0.1s ease, box-shadow 0.15s ease;
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
+        letter-spacing: 1px;
       }
       .btn:active { transform: scale(0.96); box-shadow: 0 2px 10px rgba(76, 201, 240, 0.2); }
 
-      /* ---- Touch controls (mobile only) ---- */
+      /* ----- Touch controls (mobile only) ----- */
       #touch-controls {
         position: fixed;
         left: 0;
@@ -90,8 +263,8 @@
         gap: 12px;
         padding: 0 16px;
         z-index: 50;
-        pointer-events: none; /* container passes through; buttons capture */
-        animation: ctrl-fade-in 0.25s ease-out;
+        pointer-events: none;
+        animation: ctrl-fade-in 0.3s ease-out;
       }
       body.touch #touch-controls { display: flex; }
       @keyframes ctrl-fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -127,12 +300,33 @@
         border-color: var(--accent);
         color: #fff;
       }
-      .ctrl-jump:active { background: rgba(247, 37, 133, 0.22); border-color: var(--danger); }
-      .ctrl-jump:active svg { color: var(--danger); }
+      .ctrl-jump:active { background: rgba(247, 37, 133, 0.22); border-color: var(--accent-2); }
+      .ctrl-jump:active svg { color: var(--accent-2); }
 
-      /* Hide bottom-center touch hint (the .touch-hint at bottom) when on-screen
-         buttons are visible - the buttons are self-explanatory. */
       body.touch #help { display: none; }
+
+      /* ----- Floating popups (coins, etc.) ----- */
+      #popup-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .popup {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        font-size: 22px;
+        font-weight: 800;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        animation: popup-float 1.1s ease-out forwards;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      @keyframes popup-float {
+        0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+        15% { transform: translate(-50%, -80%) scale(1.15); opacity: 1; }
+        100% { transform: translate(-50%, -160%) scale(1); opacity: 0; }
+      }
     </style>
   </head>
   <body>
@@ -142,26 +336,35 @@
         <span class="label">Score</span>
         <span class="value" id="score-value">0</span>
       </div>
+      <div id="coin-counter">
+        <span class="label">Coins</span>
+        <span class="value" id="coin-value">0</span>
+      </div>
       <div id="speed">
         <span class="label">Speed</span>
         <span class="value"><span id="speed-value">12</span> u/s</span>
       </div>
+      <div id="combo"></div>
+      <div id="level-banner">
+        <div class="tag">Level</div>
+        <div class="name" id="level-name"></div>
+      </div>
       <div id="help">
         <span class="kbd-hint">
-          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd> to switch lanes &nbsp;&middot;&nbsp;
-          <kbd>Space</kbd> to jump &nbsp;&middot;&nbsp;
-          <kbd>R</kbd> to restart
+          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> switch lanes &nbsp;&middot;&nbsp;
+          <kbd>Space</kbd> jump &nbsp;&middot;&nbsp;
+          <kbd>R</kbd> restart
         </span>
         <span class="touch-hint">
-          Tap <strong>left / right</strong> to switch lanes &nbsp;&middot;&nbsp;
-          Tap <strong>center</strong> or swipe up to jump
+          Tap <strong>◀</strong> <strong>JUMP</strong> <strong>▶</strong> to control
         </span>
       </div>
+      <div id="popup-layer"></div>
       <div id="overlay">
         <div class="panel" id="panel">
           <h1>Cube Runner</h1>
           <p class="start-hint kbd">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd> to start</p>
-          <p class="start-hint touch">Tap left / right to start, or tap center to jump</p>
+          <p class="start-hint touch">Tap <strong>◀</strong> <kbd>JUMP</kbd> <strong>▶</strong> to start</p>
         </div>
       </div>
     </div>
@@ -171,7 +374,6 @@
         var isTouch =
           'ontouchstart' in window ||
           (navigator.maxTouchPoints != null && navigator.maxTouchPoints > 0) ||
-          // iPad reports as Mac with touch screen - detect pointer coarse
           (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
         if (isTouch) document.body.classList.add('touch')
       })()

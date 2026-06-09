@@ -1,0 +1,9 @@
+services:
+  web:
+    container_name: cube-runner
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3400:80"
+    restart: unless-stopped

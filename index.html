@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Cube Runner</title>
+    <style>
+      :root {
+        --bg: #0b0b1a;
+        --accent: #4cc9f0;
+        --danger: #f72585;
+        --text: #f2f2f5;
+        --muted: #8a8aa3;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+      #game { display: block; width: 100vw; height: 100vh; }
+      #hud { position: fixed; inset: 0; pointer-events: none; }
+      #score { position: absolute; top: 24px; left: 24px; font-size: 18px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #score .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
+      #score .value { font-size: 32px; font-variant-numeric: tabular-nums; color: var(--accent); }
+      #speed { position: absolute; top: 24px; right: 24px; text-align: right; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #speed .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
+      #speed .value { font-size: 18px; font-variant-numeric: tabular-nums; }
+      #help { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #help kbd { display: inline-block; padding: 2px 6px; margin: 0 2px; border: 1px solid rgba(255,255,255,0.18); border-radius: 4px; font-family: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.04); }
+      #overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(11, 11, 26, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      #overlay.visible { display: flex; }
+      .panel { text-align: center; padding: 32px 48px; }
+      .panel h1 { font-size: 48px; font-weight: 700; letter-spacing: -1px; margin-bottom: 8px; background: linear-gradient(135deg, var(--accent) 0%, #f72585 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .panel h2 { font-size: 22px; font-weight: 600; color: var(--danger); margin-bottom: 24px; }
+      .panel p { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+      .panel .final { font-size: 56px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); margin: 16px 0 24px; }
+      .panel .start-hint { font-size: 13px; color: var(--muted); margin-top: 16px; }
+      .panel .start-hint kbd { display: inline-block; padding: 4px 10px; margin: 0 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-family: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.06); }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      <div id="score">
+        <span class="label">Score</span>
+        <span class="value" id="score-value">0</span>
+      </div>
+      <div id="speed">
+        <span class="label">Speed</span>
+        <span class="value"><span id="speed-value">12</span> u/s</span>
+      </div>
+      <div id="help">
+        <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to switch lanes &nbsp;·&nbsp;
+        <kbd>Space</kbd> to jump &nbsp;·&nbsp;
+        <kbd>R</kbd> to restart
+      </div>
+      <div id="overlay">
+        <div class="panel" id="panel">
+          <h1>Cube Runner</h1>
+          <p class="start-hint">Press <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to start</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

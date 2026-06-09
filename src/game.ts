@@ -4,6 +4,7 @@ import { Player } from './player'
 import { Obstacles } from './obstacles'
 import { bindInput } from './input'
 import { Hud } from './hud'
+import { TouchControls } from './touch-controls'
 
 type State = 'READY' | 'PLAYING' | 'GAME_OVER'
 
@@ -12,6 +13,7 @@ export class Game {
   private player!: Player
   private obstacles!: Obstacles
   private hud!: Hud
+  private touchControls?: TouchControls
   private state: State = 'READY'
   private score = 0
   private distance = 0
@@ -58,6 +60,33 @@ export class Game {
         if (this.state === 'GAME_OVER') this.restart()
       },
     })
+
+    // On touch devices, show persistent on-screen control buttons.
+    if (document.body.classList.contains('touch')) {
+      this.touchControls = new TouchControls({
+        onLeft: () => {
+          if (this.state === 'GAME_OVER') return
+          this.startIfReady()
+          this.player.moveLeft()
+        },
+        onRight: () => {
+          if (this.state === 'GAME_OVER') return
+          this.startIfReady()
+          this.player.moveRight()
+        },
+        onJump: () => {
+          if (this.state === 'GAME_OVER') return
+          this.startIfReady()
+          this.player.jump()
+        },
+        onAnyKey: () => {
+          if (this.state === 'READY') this.startIfReady()
+        },
+        onRestart: () => {
+          if (this.state === 'GAME_OVER') this.restart()
+        },
+      })
+    }
 
     this.hud.showStart()
     this.hud.setScore(0)
@@ -146,5 +175,6 @@ export class Game {
   destroy() {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId)
     this.disposeInput?.()
+    this.touchControls?.destroy()
   }
 }

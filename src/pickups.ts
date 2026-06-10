@@ -117,12 +117,18 @@ export class Pickups {
   /** Returns the number of coins collected this call. */
   checkCollection(playerBox: THREE.Box3): number {
     let collected = 0
+    // Reuse a single scratch Box3 across all coins in this call. The
+    // intersection test reads the box's min/max values synchronously, so
+    // it's safe to overwrite the same Box3 for every coin in the loop.
+    // The previous code did `new THREE.Box3()` per active coin — with
+    // magnet + a full pool that was 24 allocations per frame.
+    const scratch = this.hitBoxes[0] ?? (this.hitBoxes[0] = new THREE.Box3())
     for (const e of this.pool) {
       if (!e.active || e.scored) continue
       const m = e.mesh
-      this.hitBoxes[0] = new THREE.Box3().setFromObject(m)
-      this.hitBoxes[0].expandByScalar(-0.1)
-      if (playerBox.intersectsBox(this.hitBoxes[0]!)) {
+      scratch.setFromObject(m)
+      scratch.expandByScalar(-0.1)
+      if (playerBox.intersectsBox(scratch)) {
         e.scored = true
         e.active = false
         e.mesh.visible = false

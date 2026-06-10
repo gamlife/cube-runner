@@ -466,10 +466,14 @@ export class Game {
           if (this.player.consumeShield()) this.handleShieldHit()
           else this.endGame()
         } else {
-          // Enemy car collisions
-          this.enemies.getActiveBoxes(this.enemyBoxes)
+          // Enemy car collisions. getActiveBoxes returns the number of
+          // active boxes (not the full array length) so we don't test stale
+          // entries from previous frames — the underlying Box3 objects are
+          // shared scratch slots, so anything past `n` would be undefined
+          // or refer to a different enemy from earlier in the frame.
+          const n = this.enemies.getActiveBoxes(this.enemyBoxes)
           let hit = false
-          for (let i = 0; i < this.enemyBoxes.length; i++) {
+          for (let i = 0; i < n; i++) {
             if (this.playerBox.intersectsBox(this.enemyBoxes[i]!)) {
               hit = true
               break

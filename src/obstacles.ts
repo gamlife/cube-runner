@@ -5,6 +5,13 @@ const POOL_SIZE = 18
 const SPAWN_Z = -60
 const DESPAWN_Z = 8
 
+/**
+ * Module-level scratch Color. Reused inside flashHit to avoid allocating a
+ * new THREE.Color every hit (the material's emissive field is then mutated
+ * via .copy(), which doesn't trigger a uniform re-upload the way `=` does).
+ */
+const _scratchFlashColor = new THREE.Color()
+
 export type ObstacleKind = 'cone' | 'barrier' | 'crate' | 'hedge' | 'sign' | 'pillar'
 
 interface PoolEntry {
@@ -19,6 +26,16 @@ interface PoolEntry {
   wobblePhase?: number
   /** Sign pole rotation speed */
   poleSpin?: number
+  /**
+   * Z position at the start of the previous physics step. We use this for a
+   * swept AABB collision test: an obstacle can move farther per step than
+   * its own Z thickness (a sign panel is ~0.1 in Z, but the world moves
+   * up to 0.467/step at max speed), so checking the end-of-step AABB alone
+   * lets the player "skip" past the obstacle. Expanding the collision box
+   * to include [prevZ, currentZ] covers the swept volume and prevents the
+   * visual glitch where you can see the player pass through a sign.
+   */
+  prevZ: number
 }
 
 /**
@@ -83,6 +100,7 @@ export class Obstacles {
         height: 1,
         kind: 'cone',
         scored: false,
+        prevZ: 0,
       })
     }
   }
@@ -119,6 +137,9 @@ export class Obstacles {
     this.timeSinceStart += dt
     for (const e of this.pool) {
       if (!e.active) continue
+      // Snapshot the current Z before moving so checkCollision can build a
+      // swept AABB over [prevZ, currentZ] — see checkCollision below.
+      e.prevZ = e.group.position.z
       e.group.position.z += this.speed * dt
       // wobble / spin
       if (e.kind === 'cone' || e.kind === 'crate') {
@@ -153,6 +174,17 @@ export class Obstacles {
     for (const e of this.pool) {
       if (!e.active) continue
       this.box.setFromObject(e.group)
+      // Swept AABB: an obstacle at max speed moves farther per step (0.467)
+      // than some of its own Z thicknesses (sign panel is ~0.1, pole is
+      // 0.06). The end-of-step AABB alone lets the player "skip" past the
+      // obstacle between two consecutive physics steps. Expand the box in
+      // Z to cover [prevZ, currentZ] so the swept volume is tested. The
+      // X/Y extents are unchanged (the obstacle doesn't move on those
+      // axes), so this is a cheap, exact swept test for a pure-Z move.
+      const halfThick = (this.box.max.z - this.box.min.z) / 2
+      const curZ = e.group.position.z
+      this.box.min.z = Math.min(this.box.min.z, e.prevZ - halfThick)
+      this.box.max.z = Math.max(this.box.max.z, curZ + halfThick)
       this.box.expandByScalar(-0.1)
       if (playerBox.intersectsBox(this.box)) return true
     }
@@ -173,10 +205,15 @@ export class Obstacles {
       }
     }
     if (!best) return
+    // Mutate the emissive Color in place via .copy(scratch). This avoids the
+    // per-hit `new THREE.Color(0xff2030)` allocation (called for every hit)
+    // and keeps the same Color object reference, so Three.js doesn't have
+    // to re-upload the uniform after this call.
+    _scratchFlashColor.setHex(0xff2030)
     best.group.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
       if (m && m.emissive) {
-        m.emissive = new THREE.Color(0xff2030)
+        m.emissive.copy(_scratchFlashColor)
         m.emissiveIntensity = 1
       }
     })

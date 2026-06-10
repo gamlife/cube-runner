@@ -166,11 +166,18 @@ export class Hud {
     `
     const btn = this.panel.querySelector<HTMLButtonElement>('#resume-btn')
     if (btn) {
-      btn.addEventListener('click', (e) => {
+      // Match bindButton(): listen for both pointerdown and click. On iOS
+      // Safari, a window-level touchmove handler can suppress the synthetic
+      // click after a tap; pointerdown fires as soon as the finger lands,
+      // so the Resume button works on the first try. The click listener
+      // stays as a keyboard/desktop fallback.
+      const fire = (e: Event) => {
         e.stopPropagation()
         e.preventDefault()
         onResume()
-      })
+      }
+      btn.addEventListener('pointerdown', fire)
+      btn.addEventListener('click', fire)
     }
     this.overlay.classList.add('visible')
   }

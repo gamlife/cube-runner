@@ -28,12 +28,21 @@ export class Enemies {
   private readonly baseSpeed = 8
   private readonly maxSpeed = 18
   private speed: number = this.baseSpeed
-  private readonly tmpBox = new THREE.Box3()
+  /**
+   * Pre-allocated Box3 pool (one per pool slot). The previous code did
+   * `out[n++] = this.tmpBox.clone()` per active enemy per physics step,
+   * which allocated up to 8 Box3 objects every frame on top of all the
+   * other per-frame work. With these we write into a fixed array slot
+   * and the consumer reads from the same slot on the same frame — no
+   * allocations, no GC pressure.
+   */
+  private readonly tmpBoxes: THREE.Box3[] = []
   private readonly worldSpeedRef: () => number
 
   constructor(scene: THREE.Scene, worldSpeed: () => number) {
     this.worldSpeedRef = worldSpeed
     for (let i = 0; i < POOL_SIZE; i++) {
+      this.tmpBoxes.push(new THREE.Box3())
       const g = this.makeCar('car', 0xff3a3a)
       g.visible = false
       scene.add(g)
@@ -81,11 +90,16 @@ export class Enemies {
   /** Returns the bounding box for a car in world space, or null. */
   getActiveBoxes(out: THREE.Box3[]): number {
     let n = 0
-    for (const e of this.pool) {
+    for (let i = 0; i < this.pool.length; i++) {
+      const e = this.pool[i]!
       if (!e.active) continue
-      this.tmpBox.setFromObject(e.group)
-      this.tmpBox.expandByScalar(-0.1)
-      out[n++] = this.tmpBox.clone()
+      // Use a pre-allocated Box3 (one per pool slot). The consumer reads
+      // these within the same frame, so writing into a shared slot is
+      // safe — the .intersectsBox() check consumes the values before
+      // the next write happens.
+      this.tmpBoxes[i]!.setFromObject(e.group)
+      this.tmpBoxes[i]!.expandByScalar(-0.1)
+      out[n++] = this.tmpBoxes[i]!
     }
     return n
   }

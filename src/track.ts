@@ -14,6 +14,12 @@ export class Track {
   private lineMat!: THREE.MeshBasicMaterial
   private stripeMat!: THREE.MeshBasicMaterial
   private curbMat!: THREE.MeshStandardMaterial
+  // Lane dashes (between lanes) — these scroll toward the player each frame
+  // so the road itself appears to move past. Stored as a flat array for
+  // efficient per-frame updates.
+  private readonly dashes: THREE.Mesh[] = []
+  private readonly dashSpacing = 2.5
+  private readonly dashRecycleZ = 8
 
   constructor() {
     this.group = new THREE.Group()
@@ -83,6 +89,7 @@ export class Track {
         line.rotation.x = -Math.PI / 2
         line.position.set(x, 0.005, z)
         this.group.add(line)
+        this.dashes.push(line)
       }
     }
 
@@ -107,5 +114,28 @@ export class Track {
     this.roadMat.color.setHex(theme.roadColor)
     this.curbMat.color.setHex(theme.curbColor)
     this.lineMat.color.setHex(theme.roadLineColor)
+  }
+
+  /**
+   * Scroll lane dashes toward the player and recycle them to the far end when
+   * they pass. This makes the road itself appear to move past, giving a strong
+   * "running forward" sensation (the static road surface is the main culprit
+   * when the world feels like obstacles are coming at you instead).
+   */
+  update(speed: number, dt: number) {
+    if (this.dashes.length === 0) return
+    let minZ = Infinity
+    for (const d of this.dashes) {
+      d.position.z += speed * dt
+      if (d.position.z < minZ) minZ = d.position.z
+    }
+    // Wrap recycled dashes to the back of the line so the spacing stays even
+    // and there's no visible gap in the row.
+    for (const d of this.dashes) {
+      if (d.position.z > this.dashRecycleZ) {
+        minZ -= this.dashSpacing
+        d.position.z = minZ
+      }
+    }
   }
 }

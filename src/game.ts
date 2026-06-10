@@ -365,6 +365,7 @@ export class Game {
       this.ctx.decorations.update(this.obstacles.getSpeed() * sdt, sdt)
       this.ctx.parallax.update(sdt)
       this.ctx.sky.update(sdt)
+      this.ctx.track.update(this.obstacles.getSpeed(), sdt)
       this.particles.update(sdt)
 
       // Camera shake decay
@@ -439,8 +440,17 @@ export class Game {
     this.cameraTargetX += (this.player.group.position.x * 0.35 - this.cameraTargetX) * 0.08
     const baseY = 4.2 + (this.player.group.position.y - 0.5) * 0.3
     this.cameraY += (baseY - this.cameraY) * 0.08
+    // Subtle vertical "running" bob — sells the forward-motion feel
+    // (without it, the world feels like a conveyor belt).
+    const bob = Math.sin(this.totalTime * 14) * 0.04
+    // FOV widens with speed: a small 60→66° change at top speed gives
+    // a tunnel-vision rush that reads as "I'm running faster".
+    const speedNorm = (this.obstacles.getSpeed() - 12) / 16
+    const targetFov = 60 + Math.max(0, Math.min(1, speedNorm)) * 6
+    this.ctx.camera.fov += (targetFov - this.ctx.camera.fov) * 0.05
+    this.ctx.camera.updateProjectionMatrix()
     const camX = this.cameraTargetX
-    const camY = this.cameraY
+    const camY = this.cameraY + bob
     // Apply shake (decaying random offset)
     if (this.ctx.shake > 0.01) {
       const s = this.ctx.shake

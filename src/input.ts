@@ -52,7 +52,7 @@ export function bindInput(b: InputBindings): () => void {
   // left/right = change lane. This makes the game feel responsive on iOS Safari.
   const TAP_MAX_MS = 250
   const TAP_MAX_MOVE = 12
-  const SWIPE_MIN_DIST = 36
+  const SWIPE_MIN_DIST = 28
   const HORIZONTAL_RATIO = 0.33 // left zone is 0..33% of viewport width
 
   interface Touch {

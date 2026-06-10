@@ -50,6 +50,17 @@ export class Game {
   private timeScale = 1
   private bestScore = 0
   private musicEnabled = true
+  // ---- Fixed-timestep physics ----
+  // Game logic always advances in 1/60 s slices regardless of display refresh
+  // rate. This makes movement, jumps, and collisions deterministic and
+  // frame-rate independent. The accumulator drains any leftover time from a
+  // slow frame into extra physics steps (capped at maxPhysicsSteps to avoid
+  // the spiral-of-death on a hung tab).
+  private physicsAccumulator = 0
+  private readonly fixedDt = 1 / 60
+  private readonly maxPhysicsSteps = 5
+  /** Scratch Vector3 reused in onCoinCollected to avoid per-coin allocations. */
+  private readonly popupVec = new THREE.Vector3()
 
   async start() {
     const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -274,11 +285,14 @@ export class Game {
     this.hud.bumpCombo()
     this.audio.sfx('coin')
     this.particles.sparkle(x, y, z, THEMES[this.levels.getLevelIndex()]!.pickupColor, 8)
-    // Project 3D position to screen for the "+N" popup
-    const v = new THREE.Vector3(x, y, z)
-    v.project(this.ctx.camera)
-    const sx = (v.x + 1) / 2
-    const sy = (1 - v.y) / 2
+    // Project 3D position to screen for the "+N" popup. Reuse the scratch
+    // Vector3 instead of `new`-ing one every coin — on a long run with a
+    // magnet active you can collect a coin every frame, and the per-coin
+    // allocation shows up as GC pressure.
+    this.popupVec.set(x, y, z)
+    this.popupVec.project(this.ctx.camera)
+    const sx = (this.popupVec.x + 1) / 2
+    const sy = (1 - this.popupVec.y) / 2
     this.hud.showPopup(sx, sy, `+${bonus}`, '#ffd24a')
   }
 
@@ -311,24 +325,53 @@ export class Game {
   }
 
   private tick = (ts: number) => {
-    const dt = Math.min((ts - this.lastTs) / 1000, 0.05)
+    const realDt = Math.min((ts - this.lastTs) / 1000, 0.1)
     this.lastTs = ts
 
-    // Slow-mo: when active, scale time down for dramatic effect
+    // Slow-mo: when active, scale time down for dramatic effect.
+    // Uses realDt (not sdt) so the slow-mo countdown tracks wall clock,
+    // not the (potentially sped-up) physics accumulator.
     if (this.slowMoTimer > 0) {
-      this.slowMoTimer = Math.max(0, this.slowMoTimer - dt)
+      this.slowMoTimer = Math.max(0, this.slowMoTimer - realDt)
       this.timeScale = 0.35
     } else {
       this.timeScale = 1
     }
-    const sdt = dt * this.timeScale
+    const sdt = this.fixedDt * this.timeScale
 
+    // Fixed-timestep physics accumulator. Game logic always steps at exactly
+    // 1/60 s, regardless of display refresh rate, so movement is frame-rate
+    // independent and collisions are deterministic. The accumulator drains
+    // any leftover time from a slow frame into extra steps (capped to
+    // maxPhysicsSteps to prevent the spiral-of-death on a hung tab).
+    this.physicsAccumulator += realDt
+    let steps = 0
+    while (this.physicsAccumulator >= this.fixedDt && steps < this.maxPhysicsSteps) {
+      this.physicsStep(sdt)
+      this.physicsAccumulator -= this.fixedDt
+      steps++
+    }
+
+    // Visual layer: camera shake (uses Math.random → not deterministic, so
+    // it stays out of the physics step) + render.
+    this.renderFrame()
+    this.rafId = requestAnimationFrame(this.tick)
+  }
+
+  /**
+   * One fixed-timestep physics step. All gameplay-side updates live here so
+   * they advance at a consistent rate regardless of the display's refresh
+   * rate. `sdt` is fixedDt * timeScale (already 1/60 * scale at construction),
+   * never the raw realDt, so the same code path runs at 60Hz physics on a
+   * 60Hz, 120Hz, or 30Hz display.
+   */
+  private physicsStep(sdt: number) {
     if (this.state === 'PLAYING') {
       this.totalTime += sdt
       this.timeInState += sdt
-      this.hitCooldown = Math.max(0, this.hitCooldown - dt)
-      this.magnetTimer = Math.max(0, this.magnetTimer - dt)
-      this.boostTimer = Math.max(0, this.boostTimer - dt)
+      this.hitCooldown = Math.max(0, this.hitCooldown - sdt)
+      this.magnetTimer = Math.max(0, this.magnetTimer - sdt)
+      this.boostTimer = Math.max(0, this.boostTimer - sdt)
 
       // Update HUD power-up indicator countdown
       if (this.magnetTimer > 0) this.hud.setPower('magnet', this.magnetTimer, true)
@@ -345,10 +388,10 @@ export class Game {
       // Level progression + crossfade
       this.levels.check(this.score, sdt)
       const theme = this.levels.getTheme()
-      // Apply the (possibly lerped) theme every frame during a transition,
-      // not just when the level index flips. The old code only ran at the
-      // very end of the 1.6s transition, which burst ~20 GPU uniform
-      // updates into a single frame — a noticeable hitch on mobile.
+      // Apply the (possibly lerped) theme every physics step during a
+      // transition, not just when the level index flips. The old code only
+      // ran at the very end of the 1.6s transition, which burst ~20 GPU
+      // uniform updates into a single frame — a noticeable hitch on mobile.
       // Spreading the updates across the transition window keeps each
       // frame's GPU work trivial and turns the hard color switch into a
       // smooth crossfade.
@@ -365,23 +408,29 @@ export class Game {
       if (newScore !== this.score) {
         this.score = newScore
         this.hud.setScore(this.score)
-        // Milestone check
         if (this.score >= this.nextMilestone) {
           this.celebrateMilestone()
           this.nextMilestone += 250
         }
       }
 
-      // Update entities
+      // Player keeps responding to taps/swipes/drags during the level
+      // transition so the user isn't locked out for 1.6s.
       this.player.update(sdt)
-      if (!this.levels.isPaused()) {
+
+      // World freeze during a level transition: nothing in the world moves
+      // while the theme crossfades. Obstacles, pickups, decorations,
+      // parallax, sky and track all hold position. This is the change that
+      // makes the level change feel like a clean cut instead of "obstacles
+      // gliding past the banner".
+      const transitioning = this.levels.isPaused()
+      if (!transitioning) {
         this.obstacles.update(sdt, () => {
           this.dodgeBonus += 5
         })
         this.enemies.update(sdt)
         this.pickups.update(sdt, this.obstacles.getSpeed())
         this.powerups.update(sdt, this.obstacles.getSpeed())
-        // Apply magnet
         if (this.magnetTimer > 0) {
           this.pickups.applyMagnet(
             this.player.group.position.x,
@@ -391,37 +440,31 @@ export class Game {
             sdt,
           )
         }
+        this.ctx.decorations.update(this.obstacles.getSpeed(), sdt)
+        this.ctx.parallax.update(sdt)
+        this.ctx.sky.update(sdt)
+        this.ctx.track.update(this.obstacles.getSpeed(), sdt)
       }
-      this.ctx.decorations.update(this.obstacles.getSpeed(), sdt)
-      this.ctx.parallax.update(sdt)
-      this.ctx.sky.update(sdt)
-      this.ctx.track.update(this.obstacles.getSpeed(), sdt)
       this.particles.update(sdt)
 
-      // Camera shake decay
-      this.ctx.shake = Math.max(0, this.ctx.shake - dt * 1.5)
+      // Camera shake decay + camera position smoothing. These tick at the
+      // physics rate (not the display rate) so the smoothing speed doesn't
+      // double on a 120Hz screen.
+      this.ctx.shake = Math.max(0, this.ctx.shake - sdt * 1.5)
+      this.cameraTargetX += (this.player.group.position.x * 0.35 - this.cameraTargetX) * 0.08
+      const baseY = 4.2 + (this.player.group.position.y - 0.5) * 0.3
+      this.cameraY += (baseY - this.cameraY) * 0.08
+      const speedNorm = (this.obstacles.getSpeed() - 12) / 16
+      const targetFov = 60 + Math.max(0, Math.min(1, speedNorm)) * 6
+      this.ctx.camera.fov += (targetFov - this.ctx.camera.fov) * 0.05
+      this.ctx.camera.updateProjectionMatrix()
 
       // Collisions
       this.player.getHitBox(this.playerBox)
       if (this.hitCooldown === 0) {
         if (this.obstacles.checkCollision(this.playerBox)) {
-          if (this.player.consumeShield()) {
-            // Shield absorbs hit, brief invuln
-            this.hitCooldown = 0.5
-            this.ctx.shake = 0.5
-            this.audio.sfx('coin')
-            this.particles.sparkle(
-              this.player.group.position.x,
-              1,
-              this.player.group.position.z,
-              0x4cc9f0,
-              16,
-            )
-            this.player.hitFlash = 0.4
-            this.hud.clearPower()
-          } else {
-            this.endGame()
-          }
+          if (this.player.consumeShield()) this.handleShieldHit()
+          else this.endGame()
         } else {
           // Enemy car collisions
           this.enemies.getActiveBoxes(this.enemyBoxes)
@@ -433,22 +476,8 @@ export class Game {
             }
           }
           if (hit) {
-            if (this.player.consumeShield()) {
-              this.hitCooldown = 0.5
-              this.ctx.shake = 0.5
-              this.audio.sfx('coin')
-              this.particles.sparkle(
-                this.player.group.position.x,
-                1,
-                this.player.group.position.z,
-                0x4cc9f0,
-                16,
-              )
-              this.player.hitFlash = 0.4
-              this.hud.clearPower()
-            } else {
-              this.endGame()
-            }
+            if (this.player.consumeShield()) this.handleShieldHit()
+            else this.endGame()
           }
         }
       }
@@ -461,27 +490,25 @@ export class Game {
     } else if (this.state === 'GAME_OVER') {
       this.player.update(sdt)
       this.particles.update(sdt)
-      this.ctx.shake = Math.max(0, this.ctx.shake - dt * 1.5)
+      this.ctx.shake = Math.max(0, this.ctx.shake - sdt * 1.5)
     } else {
       this.player.update(sdt)
     }
+  }
 
-    // Camera follow with X lag (parallax)
-    this.cameraTargetX += (this.player.group.position.x * 0.35 - this.cameraTargetX) * 0.08
-    const baseY = 4.2 + (this.player.group.position.y - 0.5) * 0.3
-    this.cameraY += (baseY - this.cameraY) * 0.08
+  /**
+   * Visual-only update that runs once per render frame (not per physics
+   * step). It applies the non-deterministic camera shake offset, points the
+   * camera, and renders the scene.
+   */
+  private renderFrame() {
     // Subtle vertical "running" bob — sells the forward-motion feel
     // (without it, the world feels like a conveyor belt).
     const bob = Math.sin(this.totalTime * 14) * 0.04
-    // FOV widens with speed: a small 60→66° change at top speed gives
-    // a tunnel-vision rush that reads as "I'm running faster".
-    const speedNorm = (this.obstacles.getSpeed() - 12) / 16
-    const targetFov = 60 + Math.max(0, Math.min(1, speedNorm)) * 6
-    this.ctx.camera.fov += (targetFov - this.ctx.camera.fov) * 0.05
-    this.ctx.camera.updateProjectionMatrix()
     const camX = this.cameraTargetX
     const camY = this.cameraY + bob
-    // Apply shake (decaying random offset)
+    // Apply shake (decaying random offset) — Math.random, so this stays
+    // in the render path (not deterministic).
     if (this.ctx.shake > 0.01) {
       const s = this.ctx.shake
       this.ctx.camera.position.set(
@@ -495,7 +522,22 @@ export class Game {
     this.ctx.camera.lookAt(camX * 0.4, 0.5, -10)
 
     this.ctx.renderer.render(this.ctx.scene, this.ctx.camera)
-    this.rafId = requestAnimationFrame(this.tick)
+  }
+
+  /** Shared shield-absorption path used by both obstacle and enemy hits. */
+  private handleShieldHit() {
+    this.hitCooldown = 0.5
+    this.ctx.shake = 0.5
+    this.audio.sfx('coin')
+    this.particles.sparkle(
+      this.player.group.position.x,
+      1,
+      this.player.group.position.z,
+      0x4cc9f0,
+      16,
+    )
+    this.player.hitFlash = 0.4
+    this.hud.clearPower()
   }
 
   destroy() {

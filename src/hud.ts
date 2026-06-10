@@ -123,11 +123,18 @@ export class Hud {
   }
 
   showLevelBanner(name: string) {
-    this.levelName.textContent = name
-    this.levelBanner.classList.remove('show')
-    // Force reflow so the animation can restart
-    void this.levelBanner.offsetWidth
-    this.levelBanner.classList.add('show')
+    // Defer the DOM update to the next animation frame. The synchronous
+    // forced reflow (`void this.levelBanner.offsetWidth`) plus textContent
+    // assignment is the largest single-frame cost at the moment of a level
+    // change; pushing it one frame out keeps the level-change frame tight
+    // and the user still sees the banner immediately on the next paint.
+    requestAnimationFrame(() => {
+      this.levelName.textContent = name
+      this.levelBanner.classList.remove('show')
+      // Force reflow so the animation can restart
+      void this.levelBanner.offsetWidth
+      this.levelBanner.classList.add('show')
+    })
   }
 
   onRestartClick(handler: () => void) {

@@ -178,6 +178,9 @@
         background: rgba(11, 11, 26, 0.78);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
+        /* #hud is pointer-events: none, so the overlay must explicitly opt in
+           to receive clicks for the buttons inside it. */
+        pointer-events: auto;
       }
       #overlay.visible { display: flex; }
       .panel {

@@ -198,11 +198,21 @@ export class Hud {
   private bindButton() {
     const btn = this.panel.querySelector<HTMLButtonElement>('button.btn')
     if (btn) {
-      btn.addEventListener('click', (e) => {
+      // Use pointerdown instead of click: the synthetic click on iOS Safari
+      // can be suppressed by window-level touchmove handlers (or a fast
+      // tap-then-lift) and we want the Restart / Start / Resume action to
+      // fire as soon as the user's finger lands. pointerdown is the same
+      // event the on-screen touch controls use (see touch-controls.ts), so
+      // behavior is consistent across all HUD buttons.
+      const fire = (e: Event) => {
         e.stopPropagation()
         e.preventDefault()
         this.restartHandler?.()
-      })
+      }
+      btn.addEventListener('pointerdown', fire)
+      // Keep the click listener as a fallback for keyboard / desktop users
+      // and as a second chance for platforms that don't deliver pointerdown.
+      btn.addEventListener('click', fire)
     }
   }
 }

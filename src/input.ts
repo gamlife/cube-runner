@@ -116,6 +116,12 @@ export function bindInput(b: InputBindings): () => void {
       const data = active.get(t.identifier)
       if (!data) continue
 
+      // Touches that started on a UI control are not our concern. Critically,
+      // we must NOT call preventDefault() on their touchmove — doing so would
+      // suppress the synthetic click on iOS Safari and break the Restart /
+      // Resume / audio toggle buttons.
+      if (data.target.closest('button, [data-no-input]')) continue
+
       const dx = t.clientX - data.startX
       const dy = t.clientY - data.startY
       const absDx = Math.abs(dx)

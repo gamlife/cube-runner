@@ -345,7 +345,14 @@ export class Game {
       // Level progression + crossfade
       this.levels.check(this.score, sdt)
       const theme = this.levels.getTheme()
-      if (this.levels.getLevelIndex() !== this.lastLevelApplied) {
+      // Apply the (possibly lerped) theme every frame during a transition,
+      // not just when the level index flips. The old code only ran at the
+      // very end of the 1.6s transition, which burst ~20 GPU uniform
+      // updates into a single frame — a noticeable hitch on mobile.
+      // Spreading the updates across the transition window keeps each
+      // frame's GPU work trivial and turns the hard color switch into a
+      // smooth crossfade.
+      if (this.levels.isPaused() || this.levels.getLevelIndex() !== this.lastLevelApplied) {
         applyThemeToScene(this.ctx, theme)
         this.lastLevelApplied = this.levels.getLevelIndex()
       }

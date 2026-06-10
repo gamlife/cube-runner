@@ -40,6 +40,12 @@ export class Player {
   private jumpSquashT = 0
   private landSquashT = 0
   private spinOut = 0 // 0..1 when hit, decays
+  /**
+   * When set, the player's X is driven by this value directly (free movement
+   * along the road width). Used by the hold-and-drag gesture. `null` falls
+   * back to the normal lane-based interpolation.
+   */
+  private freeX: number | null = null
   /** Public so the game can read whether the player is in the air. */
   onGround = true
   /** Public so the game can clear the hit flash when level transitions. */
@@ -142,6 +148,34 @@ export class Player {
     }
   }
 
+  /**
+   * Engage hold-and-drag mode: from now on, the player's X is set directly
+   * from `x` (clamped to the road width) on every update(). The lane index is
+   * left in place so that when the drag ends, the player smoothly snaps back
+   * to the nearest lane instead of teleporting.
+   */
+  setFreeX(x: number) {
+    // Road half-width is 2.0 (track.ts uses trackWidth=4). Curb at ±2.09.
+    this.freeX = Math.max(-2, Math.min(2, x))
+  }
+
+  /** Release hold-and-drag mode and resume lane-based movement. */
+  clearFreeX() {
+    this.freeX = null
+    // Snap the lane index to whichever lane the player is closest to, so the
+    // resume animation heads to a meaningful target rather than the old one.
+    let bestIdx = 0
+    let bestDist = Infinity
+    for (let i = 0; i < LANE_X.length; i++) {
+      const d = Math.abs((LANE_X[i] as number) - this.group.position.x)
+      if (d < bestDist) {
+        bestDist = d
+        bestIdx = i
+      }
+    }
+    this.laneIndex = bestIdx
+  }
+
   jump() {
     if (this.onGround) {
       this.vy = JUMP_VELOCITY
@@ -189,6 +223,7 @@ export class Player {
     this.jumpSquashT = 0
     this.landSquashT = 0
     this.spinOut = 0
+    this.freeX = null
     this.group.position.set(LANE_X[this.laneIndex] as number, PLAYER_GROUND_Y, 0)
     this.group.rotation.set(0, 0, 0)
     this.group.scale.set(1, 1, 1)
@@ -200,9 +235,14 @@ export class Player {
   update(dt: number) {
     this.timeInState += dt
 
-    // Lane interpolation
+    // X position: free-drag (driven by finger) overrides the lane lerp.
+    // Otherwise we ease toward the current lane's center.
     const targetX = LANE_X[this.laneIndex] as number
-    this.group.position.x += (targetX - this.group.position.x) * LANE_LERP
+    if (this.freeX !== null) {
+      this.group.position.x = this.freeX
+    } else {
+      this.group.position.x += (targetX - this.group.position.x) * LANE_LERP
+    }
 
     // Tilt decay
     this.tilt += (this.tiltTarget - this.tilt) * TILT_LERP

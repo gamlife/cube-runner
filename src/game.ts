@@ -114,6 +114,22 @@ export class Game {
         if (this.state === 'GAME_OVER') this.restart()
       },
       onPause: () => this.togglePause(),
+      onDrag: (screenX) => {
+        if (this.state === 'GAME_OVER' || this.state === 'PAUSED') {
+          // Drop any stale drag state but don't act on it.
+          this.player.clearFreeX()
+          return
+        }
+        this.tryStart()
+        if (screenX === null) {
+          this.player.clearFreeX()
+        } else {
+          // Map screenX ∈ [0, innerWidth] → gameX ∈ [-2, 2] (the road width).
+          // The player clamps again internally so this is safe even on narrow
+          // viewports.
+          this.player.setFreeX((screenX / window.innerWidth) * 4 - 2)
+        }
+      },
     })
 
     if (document.body.classList.contains('touch')) {
@@ -126,6 +142,11 @@ export class Game {
           if (this.state === 'GAME_OVER') this.restart()
         },
         onPause: () => this.togglePause(),
+        onDrag: () => {
+          // The on-screen arrow buttons are lane-based; the free-drag gesture
+          // is only meaningful on the bare gameplay area, so the buttons
+          // don't engage it. Keep the interface complete by no-oping.
+        },
       })
     }
 

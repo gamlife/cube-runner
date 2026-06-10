@@ -124,10 +124,12 @@ export class Game {
         if (screenX === null) {
           this.player.clearFreeX()
         } else {
-          // Map screenX ∈ [0, innerWidth] → gameX ∈ [-2, 2] (the road width).
-          // The player clamps again internally so this is safe even on narrow
-          // viewports.
-          this.player.setFreeX((screenX / window.innerWidth) * 4 - 2)
+          // Map screenX ∈ [0, innerWidth] → gameX ∈ [-1.5, 1.5] (the lane
+          // range). We deliberately don't span the full road width: obstacles
+          // in the outermost lanes have hitboxes that extend past the lane
+          // center, so a drag-to-curb position would overlap with them and
+          // kill the player. Clamping to the lane range keeps the drag safe.
+          this.player.setFreeX((screenX / window.innerWidth) * 3 - 1.5)
         }
       },
     })

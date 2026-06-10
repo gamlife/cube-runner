@@ -150,13 +150,21 @@ export class Player {
 
   /**
    * Engage hold-and-drag mode: from now on, the player's X is set directly
-   * from `x` (clamped to the road width) on every update(). The lane index is
+   * from `x` (clamped to the lane range) on every update(). The lane index is
    * left in place so that when the drag ends, the player smoothly snaps back
    * to the nearest lane instead of teleporting.
+   *
+   * Why clamp to the lane range [-LANE_X_max, +LANE_X_max] and not the full
+   * road width? Obstacles in the outermost lanes have hitboxes that extend
+   * past the lane center (a crate in lane +1.5 reaches out to ~x=1.97 with
+   * the collision inset). A player parked at x=±2.0 — the curb — would
+   * overlap with those hitboxes and die instantly. Clamping to ±1.5 keeps
+   * the drag safe across every obstacle kind.
    */
   setFreeX(x: number) {
-    // Road half-width is 2.0 (track.ts uses trackWidth=4). Curb at ±2.09.
-    this.freeX = Math.max(-2, Math.min(2, x))
+    const max = LANE_X[LANE_X.length - 1] as number // 1.5
+    const min = LANE_X[0] as number // -1.5
+    this.freeX = Math.max(min, Math.min(max, x))
   }
 
   /** Release hold-and-drag mode and resume lane-based movement. */

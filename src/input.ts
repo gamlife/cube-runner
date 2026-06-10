@@ -51,9 +51,9 @@ export function bindInput(b: InputBindings): () => void {
   // Swipes (longer press or > threshold) are also accepted: swipe up = jump, swipe
   // left/right = change lane. This makes the game feel responsive on iOS Safari.
   const TAP_MAX_MS = 250
-  const TAP_MAX_MOVE = 12
-  const SWIPE_MIN_DIST = 28
-  const HORIZONTAL_RATIO = 0.33 // left zone is 0..33% of viewport width
+  const TAP_MAX_MOVE = 10
+  const SWIPE_MIN_DIST = 16
+  const HORIZONTAL_RATIO = 0.4 // left zone is 0..40% of viewport width
 
   interface Touch {
     id: number
@@ -105,29 +105,24 @@ export function bindInput(b: InputBindings): () => void {
       const absDx = Math.abs(dx)
       const absDy = Math.abs(dy)
 
-      // Ignore if the touch ended on a UI button (e.g. restart) - the button handles it.
-      if (
-        data.target instanceof HTMLElement &&
-        data.target.closest('button, [data-no-input]')
-      ) {
-        continue
-      }
-
       // Start the game on first touch
       b.onAnyKey()
 
-      // Swipe (longer / bigger move)
-      if (absDx > SWIPE_MIN_DIST || absDy > SWIPE_MIN_DIST) {
-        if (absDx > absDy) {
-          if (dx < 0) b.onLeft()
-          else b.onRight()
-        } else {
-          if (dy < 0) b.onJump() // swipe up
-        }
+      // Horizontal swipe: any clear horizontal motion (≥ 16px) wins over a
+      // vertical/center tap, so users can swipe from anywhere on the screen
+      // (including the upper gameplay area) to change lanes.
+      if (absDx >= SWIPE_MIN_DIST && absDx > absDy) {
+        if (dx < 0) b.onLeft()
+        else b.onRight()
+        continue
+      }
+      // Vertical swipe (jump)
+      if (absDy >= SWIPE_MIN_DIST && absDy > absDx && dy < 0) {
+        b.onJump()
         continue
       }
 
-      // Tap
+      // Tap (no significant motion): split screen into left/center/right zones
       if (dt <= TAP_MAX_MS && absDx <= TAP_MAX_MOVE && absDy <= TAP_MAX_MOVE) {
         const zone = getZone(t.clientX, window.innerWidth)
         if (zone === 'left') b.onLeft()

@@ -362,7 +362,7 @@ export class Game {
           )
         }
       }
-      this.ctx.decorations.update(this.obstacles.getSpeed() * sdt, sdt)
+      this.ctx.decorations.update(this.obstacles.getSpeed(), sdt)
       this.ctx.parallax.update(sdt)
       this.ctx.sky.update(sdt)
       this.ctx.track.update(this.obstacles.getSpeed(), sdt)

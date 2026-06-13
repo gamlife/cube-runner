@@ -71,6 +71,13 @@ export class Obstacles {
   private readonly signPanelGeom: THREE.BoxGeometry
   private readonly signPoleGeom: THREE.CylinderGeometry
   private readonly pillarGeom: THREE.BoxGeometry
+  // Additional shared geometries for the small inline-created parts
+  private readonly coneBaseGeom: THREE.BoxGeometry
+  private readonly barrierStripeGeom: THREE.BoxGeometry
+  private readonly barrierFootGeom: THREE.BoxGeometry
+  private readonly signXBarGeom: THREE.BoxGeometry
+  private readonly pillarCapGeom: THREE.BoxGeometry
+  private readonly hedgeTrimGeom: THREE.BoxGeometry
 
   // Material factory: each obstacle gets its own material instance so colors
   // can vary per-spawn. We avoid creating new materials per frame.
@@ -86,6 +93,13 @@ export class Obstacles {
     this.signPanelGeom = new THREE.BoxGeometry(0.85, 0.85, 0.1)
     this.signPoleGeom = new THREE.CylinderGeometry(0.06, 0.06, 1.8, 6)
     this.pillarGeom = new THREE.BoxGeometry(0.7, 1.6, 0.7)
+    // Additional shared geometries
+    this.coneBaseGeom = new THREE.BoxGeometry(0.7, 0.05, 0.7)
+    this.barrierStripeGeom = new THREE.BoxGeometry(0.32, 0.72, 0.42)
+    this.barrierFootGeom = new THREE.BoxGeometry(0.3, 0.1, 0.5)
+    this.signXBarGeom = new THREE.BoxGeometry(0.7, 0.07, 0.02)
+    this.pillarCapGeom = new THREE.BoxGeometry(0.85, 0.1, 0.85)
+    this.hedgeTrimGeom = new THREE.BoxGeometry(1.6, 0.1, 0.5)
 
     // Initialize the pool with empty placeholders
     for (let i = 0; i < POOL_SIZE; i++) {
@@ -318,7 +332,7 @@ export class Obstacles {
     }
     // Base
     const baseMat = this.mat('cone-base', 0x222222, { roughness: 0.8 })
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.7), baseMat)
+    const base = new THREE.Mesh(this.coneBaseGeom, baseMat)
     base.position.y = 0.025
     g.add(base)
   }
@@ -331,17 +345,14 @@ export class Obstacles {
     m.position.y = 0.4
     g.add(m)
     for (let i = 0; i < 5; i++) {
-      const s = new THREE.Mesh(
-        new THREE.BoxGeometry(0.32, 0.72, 0.42),
-        i % 2 === 0 ? mat : stripeMat,
-      )
+      const s = new THREE.Mesh(this.barrierStripeGeom, i % 2 === 0 ? mat : stripeMat)
       s.position.set(-0.7 + i * 0.35, 0.4, 0.001)
       g.add(s)
     }
     // Feet
     const footMat = this.mat('barrier-foot', 0x222222, { roughness: 0.8 })
     for (const x of [-0.7, 0.7]) {
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.5), footMat)
+      const foot = new THREE.Mesh(this.barrierFootGeom, footMat)
       foot.position.set(x, 0.05, 0)
       g.add(foot)
     }
@@ -376,7 +387,9 @@ export class Obstacles {
     const hedge = new THREE.Mesh(this.hedgeGeom, mat)
     hedge.position.y = 0.45
     g.add(hedge)
-    // Bumpy leaves (small spheres)
+    // Bumpy leaves (small spheres) — these vary in size, so we still create
+    // them inline. 16 spheres per hedge is acceptable since hedges spawn
+    // relatively infrequently.
     const leafMat = this.mat('hedge-leaf', new THREE.Color(color).multiplyScalar(1.15).getHex(), { roughness: 0.8 })
     for (let i = 0; i < 16; i++) {
       const r = 0.12 + Math.random() * 0.08
@@ -389,7 +402,7 @@ export class Obstacles {
     }
     // Top trim
     const trimMat = this.mat('hedge-top', 0x6a4a2a, { roughness: 0.9 })
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.5), trimMat)
+    const trim = new THREE.Mesh(this.hedgeTrimGeom, trimMat)
     trim.position.set(0, 0.05, 0)
     g.add(trim)
   }
@@ -407,11 +420,11 @@ export class Obstacles {
     g.add(panel)
     // X symbol on panel (procedural: 2 thin boxes)
     const xMat = this.mat('sign-x', 0x111111, { roughness: 0.7 })
-    const a = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.02), xMat)
+    const a = new THREE.Mesh(this.signXBarGeom, xMat)
     a.position.set(0, 1.7, 0.06)
     a.rotation.z = Math.PI / 4
     g.add(a)
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.02), xMat)
+    const b = new THREE.Mesh(this.signXBarGeom, xMat)
     b.position.set(0, 1.7, 0.06)
     b.rotation.z = -Math.PI / 4
     g.add(b)
@@ -424,7 +437,7 @@ export class Obstacles {
     g.add(pillar)
     // Top cap
     const capMat = this.mat('pillar-cap', 0x111111, { metalness: 0.5, roughness: 0.4 })
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 0.85), capMat)
+    const cap = new THREE.Mesh(this.pillarCapGeom, capMat)
     cap.position.y = 1.65
     g.add(cap)
   }

@@ -5,8 +5,75 @@ const SPAWN_Z = -60
 const DESPAWN_Z = 8
 const POOL_SIZE = 8
 
+/**
+ * Shared geometries for each car kind. Reused across all spawns of that
+ * kind so we don't allocate new BoxGeometry / CylinderGeometry /
+ * SphereGeometry every time an enemy appears.
+ */
+const CAR_GEOMETRIES = {
+  box085_07_09: new THREE.BoxGeometry(0.85, 0.7, 0.9),
+  box085_10_16: new THREE.BoxGeometry(0.85, 1.0, 1.6),
+  box086_01_16: new THREE.BoxGeometry(0.86, 0.1, 1.6),
+  box07_032_08: new THREE.BoxGeometry(0.7, 0.32, 0.8),
+  box085_05_16: new THREE.BoxGeometry(0.85, 0.5, 1.6),
+  box03_04_01: new THREE.BoxGeometry(0.3, 0.35, 1.0),
+  sphere02_12_8: new THREE.SphereGeometry(0.25, 8, 6),
+  cyl016_16_12_10: new THREE.CylinderGeometry(0.16, 0.16, 0.12, 10),
+  cyl018_18_10: new THREE.CylinderGeometry(0.18, 0.18, 0.12, 10),
+  cyl006_06_10: new THREE.CylinderGeometry(0.06, 0.06, 1.8, 6),
+  cyl02_20_12: new THREE.CylinderGeometry(0.2, 0.2, 0.15, 12),
+  box03_04_12: new THREE.BoxGeometry(0.3, 0.4, 0.05),
+  box085_12_04: new THREE.BoxGeometry(0.85, 0.12, 0.4),
+  box007_07_04: new THREE.BoxGeometry(0.07, 0.7, 0.4),
+  box007_07_012: new THREE.BoxGeometry(0.07, 0.7, 0.12),
+  box032_072_042: new THREE.BoxGeometry(0.32, 0.72, 0.42),
+  box03_03_05: new THREE.BoxGeometry(0.3, 0.3, 0.5),
+  box034_008_008: new THREE.BoxGeometry(0.34, 0.08, 0.08),
+  box08_08_008: new THREE.BoxGeometry(0.8, 0.08, 0.08),
+  sphere07_6_4: new THREE.SphereGeometry(0.07, 6, 4),
+  sphere005_6_4: new THREE.SphereGeometry(0.05, 6, 4),
+  sphere008_6_4: new THREE.SphereGeometry(0.08, 6, 4),
+} as const
+
+/**
+ * Material cache key: (kind, colorHex). The previous code did
+ * `new THREE.MeshStandardMaterial(...)` on every spawn (which can be
+ * every 2-4 seconds at high progress), allocating 4-5 materials per
+ * spawn. With this cache we reuse materials across all cars of the
+ * same (kind, color) combination.
+ */
+const MATERIAL_CACHE = new Map<string, THREE.Material>()
+
+function getCarMaterial(kind: CarEntry['kind'], color: number, variant: 'body' | 'cab' | 'stripe' | 'headlight' | 'tail' | 'wheel' | 'basic' = 'body'): THREE.Material {
+  const key = `${kind}-${color}-${variant}`
+  const cached = MATERIAL_CACHE.get(key)
+  if (cached) return cached
+
+  let mat: THREE.Material
+  if (variant === 'headlight' || variant === 'basic') {
+    mat = new THREE.MeshBasicMaterial({ color: variant === 'headlight' ? 0xfff4c4 : color })
+  } else if (variant === 'tail') {
+    mat = new THREE.MeshBasicMaterial({ color: 0xff3a3a })
+  } else if (variant === 'wheel') {
+    mat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 })
+  } else if (variant === 'stripe') {
+    mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: variant === 'stripe' ? 0.3 : 0.05, roughness: 0.5 })
+  } else {
+    // body or cab
+    mat = new THREE.MeshStandardMaterial({
+      color,
+      metalness: 0.7,
+      roughness: 0.25,
+      emissive: color,
+      emissiveIntensity: 0.05,
+    })
+  }
+  MATERIAL_CACHE.set(key, mat)
+  return mat
+}
+
 interface CarEntry {
-  group: THREE.Object3D
+  group: THREE.Group
   active: boolean
   lane: number
   speed: number // -1 = drives toward player, +1 = away
@@ -43,7 +110,8 @@ export class Enemies {
     this.worldSpeedRef = worldSpeed
     for (let i = 0; i < POOL_SIZE; i++) {
       this.tmpBoxes.push(new THREE.Box3())
-      const g = this.makeCar('car', 0xff3a3a)
+      const g = new THREE.Group()
+      this.buildCar(g, 'car', 0xff3a3a)
       g.visible = false
       scene.add(g)
       this.pool.push({ group: g, active: false, lane: 1, speed: 1, scored: false, kind: 'car' })
@@ -125,18 +193,18 @@ export class Enemies {
     const kind: CarEntry['kind'] = r < 0.6 ? 'car' : r < 0.85 ? 'truck' : 'motorcycle'
     const palette = [0xff3a3a, 0xff8a3d, 0x4cc9f0, 0xffd24a, 0x6dd58c, 0xffffff]
     const color = palette[Math.floor(Math.random() * palette.length)]!
-    // Rebuild
+    // Rebuild the car geometry using cached geometries and materials.
+    // The previous code disposed and recreated all materials/geometries on
+    // every spawn — at high progress (enemy cooldown ~2s) that's ~30
+    // allocations per minute of heavy objects. With caching we reuse the
+    // same geometries and materials across all cars of the same (kind,
+    // color) combination.
     while (slot.group.children.length) {
       const c = slot.group.children[0] as THREE.Object3D
       slot.group.remove(c)
-      c.traverse((o) => {
-        const m = (o as THREE.Mesh).material
-        if (Array.isArray(m)) m.forEach((mm) => mm.dispose())
-        else if (m) (m as THREE.Material).dispose()
-      })
+      // Don't dispose materials/geometries — they're shared now
     }
-    const built = this.makeCar(kind, color)
-    built.children.forEach((c) => slot.group.add(c))
+    this.buildCar(slot.group, kind, color)
     slot.kind = kind
     slot.lane = lane
     slot.speed = speed
@@ -147,95 +215,73 @@ export class Enemies {
     slot.active = true
   }
 
-  private makeCar(kind: CarEntry['kind'], color: number): THREE.Object3D {
-    const g = new THREE.Group()
+  private buildCar(g: THREE.Group, kind: CarEntry['kind'], color: number): void {
     if (kind === 'truck') {
       // Truck: cab + trailer
-      const cabMat = new THREE.MeshStandardMaterial({
-        color,
-        metalness: 0.7,
-        roughness: 0.25,
-        emissive: color,
-        emissiveIntensity: 0.05,
-      })
-      const cab = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.7, 0.9), cabMat)
+      const cabMat = getCarMaterial(kind, color, 'body') as THREE.MeshStandardMaterial
+      const cab = new THREE.Mesh(CAR_GEOMETRIES.box085_07_09, cabMat)
       cab.position.set(0, 0.55, 0.7)
       g.add(cab)
-      const trailerMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.4, roughness: 0.5 })
-      const trailer = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.0, 1.6), trailerMat)
+      const trailerMat = getCarMaterial('truck', 0xeeeeee, 'cab') as THREE.MeshStandardMaterial
+      const trailer = new THREE.Mesh(CAR_GEOMETRIES.box085_10_16, trailerMat)
       trailer.position.set(0, 0.7, -0.3)
       g.add(trailer)
       // stripe
-      const stripeMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, roughness: 0.5 })
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.1, 1.6), stripeMat)
+      const stripeMat = getCarMaterial(kind, color, 'stripe') as THREE.MeshStandardMaterial
+      const stripe = new THREE.Mesh(CAR_GEOMETRIES.box086_01_16, stripeMat)
       stripe.position.set(0, 0.95, -0.3)
       g.add(stripe)
       // Wheels (6)
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 })
-      const wheelGeom = new THREE.CylinderGeometry(0.18, 0.18, 0.12, 10)
+      const wheelMat = getCarMaterial('car', 0, 'wheel')
       for (const x of [-0.5, 0.5]) {
         for (const z of [1.05, 0.4, -0.95]) {
-          const w = new THREE.Mesh(wheelGeom, wheelMat)
+          const w = new THREE.Mesh(CAR_GEOMETRIES.cyl018_18_10, wheelMat)
           w.position.set(x, 0.18, z)
           w.rotation.z = Math.PI / 2
           g.add(w)
         }
       }
       // Headlights
-      const headlightMat = new THREE.MeshBasicMaterial({ color: 0xfff4c4 })
+      const headlightMat = getCarMaterial(kind, color, 'headlight')
       for (const x of [-0.28, 0.28]) {
-        const hl = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), headlightMat)
+        const hl = new THREE.Mesh(CAR_GEOMETRIES.sphere07_6_4, headlightMat)
         hl.position.set(x, 0.6, 1.16)
         g.add(hl)
       }
     } else if (kind === 'motorcycle') {
       // Motorcycle: slim body, small wheels
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color,
-        metalness: 0.9,
-        roughness: 0.2,
-        emissive: color,
-        emissiveIntensity: 0.1,
-      })
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 1.0), bodyMat)
+      const bodyMat = getCarMaterial(kind, color, 'body') as THREE.MeshStandardMaterial
+      const body = new THREE.Mesh(CAR_GEOMETRIES.box03_04_01, bodyMat)
       body.position.y = 0.45
       g.add(body)
-      const tankMat = new THREE.MeshStandardMaterial({ color, metalness: 0.9, roughness: 0.2, emissive: color, emissiveIntensity: 0.2 })
-      const tank = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), tankMat)
+      const tankMat = getCarMaterial(kind, color, 'cab') as THREE.MeshStandardMaterial
+      const tank = new THREE.Mesh(CAR_GEOMETRIES.sphere02_12_8, tankMat)
       tank.position.set(0, 0.65, 0.2)
       tank.scale.set(0.8, 0.6, 1.1)
       g.add(tank)
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 })
-      const wheelGeom = new THREE.CylinderGeometry(0.2, 0.2, 0.15, 12)
+      const wheelMat = getCarMaterial('car', 0, 'wheel')
       for (const z of [0.5, -0.5]) {
-        const w = new THREE.Mesh(wheelGeom, wheelMat)
+        const w = new THREE.Mesh(CAR_GEOMETRIES.cyl02_20_12, wheelMat)
         w.position.set(0, 0.2, z)
         w.rotation.z = Math.PI / 2
         g.add(w)
       }
       // Headlight
-      const headlightMat = new THREE.MeshBasicMaterial({ color: 0xfff4c4 })
-      const hl = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), headlightMat)
+      const headlightMat = getCarMaterial(kind, color, 'headlight')
+      const hl = new THREE.Mesh(CAR_GEOMETRIES.sphere008_6_4, headlightMat)
       hl.position.set(0, 0.55, 0.55)
       g.add(hl)
     } else {
       // Car (default): body + cabin + 4 wheels + lights
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color,
-        metalness: 0.7,
-        roughness: 0.25,
-        emissive: color,
-        emissiveIntensity: 0.05,
-      })
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.5, 1.6), bodyMat)
+      const bodyMat = getCarMaterial(kind, color, 'body') as THREE.MeshStandardMaterial
+      const body = new THREE.Mesh(CAR_GEOMETRIES.box085_05_16, bodyMat)
       body.position.y = 0.4
       g.add(body)
-      const cabMat = new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.6, roughness: 0.2 })
-      const cab = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.32, 0.8), cabMat)
+      const cabMat = getCarMaterial('car', 0x1a2030, 'cab') as THREE.MeshStandardMaterial
+      const cab = new THREE.Mesh(CAR_GEOMETRIES.box07_032_08, cabMat)
       cab.position.set(0, 0.78, -0.1)
       g.add(cab)
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 })
-      const wheelGeom = new THREE.CylinderGeometry(0.16, 0.16, 0.12, 10)
+      const wheelMat = getCarMaterial('car', 0, 'wheel')
       const wOff = 0.45
       for (const [x, z] of [
         [wOff, 0.55],
@@ -243,24 +289,23 @@ export class Enemies {
         [wOff, -0.55],
         [-wOff, -0.55],
       ]) {
-        const w = new THREE.Mesh(wheelGeom, wheelMat)
+        const w = new THREE.Mesh(CAR_GEOMETRIES.cyl016_16_12_10, wheelMat)
         w.position.set(x, 0.16, z)
         w.rotation.z = Math.PI / 2
         g.add(w)
       }
-      const headlightMat = new THREE.MeshBasicMaterial({ color: 0xfff4c4 })
+      const headlightMat = getCarMaterial(kind, color, 'headlight')
       for (const x of [-0.28, 0.28]) {
-        const hl = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), headlightMat)
+        const hl = new THREE.Mesh(CAR_GEOMETRIES.sphere07_6_4, headlightMat)
         hl.position.set(x, 0.45, 0.81)
         g.add(hl)
       }
-      const tailMat = new THREE.MeshBasicMaterial({ color: 0xff3a3a })
+      const tailMat = getCarMaterial('car', 0, 'tail')
       for (const x of [-0.28, 0.28]) {
-        const tl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), tailMat)
+        const tl = new THREE.Mesh(CAR_GEOMETRIES.sphere005_6_4, tailMat)
         tl.position.set(x, 0.45, -0.81)
         g.add(tl)
       }
     }
-    return g
   }
 }

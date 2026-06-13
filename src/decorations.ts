@@ -55,12 +55,27 @@ export class Decorations {
     for (const obj of this.pool) {
       obj.position.z += speed * dt
     }
-    // Recycle
+    // Recycle — dispose geometries, materials, and lights to avoid memory
+    // leaks. The previous code only removed the object from the scene and
+    // pool, leaving all WebGL resources in memory. With a steady stream of
+    // decorations scrolling past, this accumulated dozens of unreleased
+    // Mesh/Material/Geometry/PointLight objects per second, leading to
+    // memory growth and periodic GC pauses (especially in level 2 where
+    // lamps/neon with PointLights are common).
     for (let i = this.pool.length - 1; i >= 0; i--) {
       const obj = this.pool[i]!
       if (obj.position.z > 8) {
         this.group.remove(obj)
         this.pool.splice(i, 1)
+        obj.traverse((o) => {
+          if ((o as THREE.Mesh).geometry) (o as THREE.Mesh).geometry.dispose()
+          const m = (o as THREE.Mesh).material
+          if (Array.isArray(m)) m.forEach((mm) => mm.dispose())
+          else if (m) (m as THREE.Material).dispose()
+          // PointLight has no geometry/material, but it's still a scene
+          // object. Three.js doesn't require explicit light disposal, but
+          // we remove it from the parent above.
+        })
       }
     }
     // Spawn ahead

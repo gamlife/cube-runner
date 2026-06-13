@@ -7,6 +7,12 @@ import * as THREE from 'three'
  *   - 'neon':  glowing posts with point lights (cyan/magenta)
  *
  * Items are spawned far ahead and recycled as the world scrolls.
+ *
+ * Performance note: we limit active PointLights to the 8 closest decorations
+ * to the player. Without this, having 60 PointLights in the scene causes a
+ * massive shader complexity explosion (each light must be evaluated per pixel
+ * in the fragment shader), leading to severe frame drops in level 2+ where
+ * lamps/neon are common.
  */
 export class Decorations {
   readonly group: THREE.Group
@@ -16,6 +22,23 @@ export class Decorations {
   private readonly spacing = 4
   private readonly maxCount = 60
   private nextZ = -10
+  /**
+   * Cached PointLight references from all active decorations. Rebuilt on each
+   * update() by traversing the pool. Used to efficiently enable/disable only
+   * the closest N lights.
+   */
+  private readonly pointLights: THREE.PointLight[] = []
+  /**
+   * Maximum number of PointLights to enable at once. 8 is enough to light the
+   * area around the player without overwhelming the fragment shader.
+   */
+  private readonly maxActiveLights = 8
+  /**
+   * Distance threshold: decorations within this distance of the player are
+   * candidates for having their PointLight enabled. This is a soft limit;
+   * we then sort by distance and keep only the closest maxActiveLights.
+   */
+  private readonly lightEnableDistance = 25
 
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group()
@@ -72,9 +95,6 @@ export class Decorations {
           const m = (o as THREE.Mesh).material
           if (Array.isArray(m)) m.forEach((mm) => mm.dispose())
           else if (m) (m as THREE.Material).dispose()
-          // PointLight has no geometry/material, but it's still a scene
-          // object. Three.js doesn't require explicit light disposal, but
-          // we remove it from the parent above.
         })
       }
     }
@@ -85,6 +105,42 @@ export class Decorations {
       this.nextZ -= this.spacing
       this.group.add(obj)
       this.pool.push(obj)
+    }
+
+    // Manage PointLights: only enable the closest maxActiveLights to avoid
+    // shader complexity explosion. 60 PointLights in the scene would require
+    // each fragment to sum 60 lighting contributions — prohibitively expensive.
+    this.pointLights.length = 0
+    for (const obj of this.pool) {
+      obj.traverse((o) => {
+        if (o instanceof THREE.PointLight) {
+          this.pointLights.push(o)
+        }
+      })
+    }
+
+    // Sort by distance to player (player is at z=0, x≈0). Use squared
+    // distance to avoid sqrt calls — we only need the ordering, not the
+    // actual distance.
+    const playerZ = 0
+    const playerX = 0
+    this.pointLights.sort((a, b) => {
+      const da = (a.position.x - playerX) ** 2 + (a.position.z - playerZ) ** 2
+      const db = (b.position.x - playerX) ** 2 + (b.position.z - playerZ) ** 2
+      return da - db
+    })
+
+    // Enable only the closest lights within the threshold. Disable the rest.
+    const thresholdSq = this.lightEnableDistance ** 2
+    let enabledCount = 0
+    for (const pl of this.pointLights) {
+      const distSq = (pl.position.x - playerX) ** 2 + (pl.position.z - playerZ) ** 2
+      if (distSq <= thresholdSq && enabledCount < this.maxActiveLights) {
+        pl.visible = true
+        enabledCount++
+      } else {
+        pl.visible = false
+      }
     }
   }
 

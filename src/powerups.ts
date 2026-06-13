@@ -8,12 +8,18 @@ const POOL_SIZE = 6
 export type PowerKind = 'shield' | 'magnet' | 'boost'
 
 interface PowerEntry {
-  group: THREE.Object3D
+  group: THREE.Group
   active: boolean
   lane: number
   kind: PowerKind
   phase: number
   scored: boolean
+  /**
+   * Z position at the start of the previous physics step. Used for swept
+   * AABB collision detection — powerups are small (orb ~0.45 radius) and
+   * move fast, so end-of-step AABB alone lets them tunnel through the player.
+   */
+  prevZ: number
 }
 
 /**
@@ -36,7 +42,7 @@ export class Powerups {
       const g = this.makeOrb('shield')
       g.visible = false
       scene.add(g)
-      this.pool.push({ group: g, active: false, lane: 1, kind: 'shield', phase: 0, scored: false })
+      this.pool.push({ group: g, active: false, lane: 1, kind: 'shield', phase: 0, scored: false, prevZ: 0 })
     }
   }
 
@@ -52,6 +58,11 @@ export class Powerups {
   update(dt: number, speed: number) {
     for (const e of this.pool) {
       if (!e.active) continue
+      // Snapshot current Z before moving for swept AABB (same fix as
+      // obstacles/pickups tunneling). Powerups are small (~0.45 orb radius)
+      // and move at world speed, so at max speed they can tunnel through the
+      // player's hitbox in one physics step.
+      e.prevZ = e.group.position.z
       e.group.position.z += speed * dt
       e.phase += dt
       e.group.position.y = 1.1 + Math.sin(e.phase * 3) * 0.15
@@ -72,6 +83,14 @@ export class Powerups {
     for (const e of this.pool) {
       if (!e.active || e.scored) continue
       this.tmpBox.setFromObject(e.group)
+      // Swept AABB: powerups are small orbs (~0.45 radius) and move at world
+      // speed. At max speed (28 units/s) with fixedDt (1/60), they move
+      // 0.467 per step — comparable to their size. Expanding the box in Z
+      // to cover [prevZ, currentZ] prevents tunneling.
+      const halfThick = (this.tmpBox.max.z - this.tmpBox.min.z) / 2
+      const curZ = e.group.position.z
+      this.tmpBox.min.z = Math.min(this.tmpBox.min.z, e.prevZ - halfThick)
+      this.tmpBox.max.z = Math.max(this.tmpBox.max.z, curZ + halfThick)
       this.tmpBox.expandByScalar(-0.15)
       if (playerBox.intersectsBox(this.tmpBox)) {
         e.scored = true
@@ -106,13 +125,13 @@ export class Powerups {
     slot.active = true
   }
 
-  private makeOrb(kind: PowerKind): THREE.Object3D {
+  private makeOrb(kind: PowerKind): THREE.Group {
     const g = new THREE.Group()
     this.populateOrb(g, kind)
     return g
   }
 
-  private populateOrb(g: THREE.Object3D, kind: PowerKind) {
+  private populateOrb(g: THREE.Group, kind: PowerKind) {
     const colors: Record<PowerKind, number> = {
       shield: 0x4cc9f0,
       magnet: 0xff4ad8,

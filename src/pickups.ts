@@ -12,6 +12,12 @@ interface CoinEntry {
   scored: boolean
   spinSpeed: number
   phase: number
+  /**
+   * Z position at the start of the previous physics step. Used for swept
+   * AABB collision detection — coins are small (0.08 thick) and move fast,
+   * so end-of-step AABB alone lets them tunnel through the player.
+   */
+  prevZ: number
 }
 
 /**
@@ -53,6 +59,7 @@ export class Pickups {
         scored: false,
         spinSpeed: 2 + Math.random() * 2,
         phase: Math.random() * Math.PI * 2,
+        prevZ: 0,
       })
     }
     this.cooldown = 0.5
@@ -79,6 +86,11 @@ export class Pickups {
   update(dt: number, speed: number) {
     for (const e of this.pool) {
       if (!e.active) continue
+      // Snapshot current Z before moving for swept AABB (same fix as
+      // obstacles tunneling). Coins are thin (0.08) and move at world speed,
+      // so at max speed they can tunnel through the player's hitbox in one
+      // physics step.
+      e.prevZ = e.mesh.position.z
       e.mesh.position.z += speed * dt
       e.mesh.rotation.y += e.spinSpeed * dt
       // bob
@@ -127,7 +139,17 @@ export class Pickups {
       if (!e.active || e.scored) continue
       const m = e.mesh
       scratch.setFromObject(m)
-      scratch.expandByScalar(-0.1)
+      // Swept AABB: coins are thin (0.08 thickness) and move at world speed.
+      // At max speed (28 units/s) with fixedDt (1/60), a coin moves 0.467 per
+      // step — larger than its own thickness. Expanding the box in Z to cover
+      // [prevZ, currentZ] prevents tunneling. We also reduced the expandByScalar
+      // from -0.1 to -0.05 to make the hitbox slightly more forgiving (coins
+      // are small and players expect to collect them when "close enough").
+      const halfThick = (scratch.max.z - scratch.min.z) / 2
+      const curZ = m.position.z
+      scratch.min.z = Math.min(scratch.min.z, e.prevZ - halfThick)
+      scratch.max.z = Math.max(scratch.max.z, curZ + halfThick)
+      scratch.expandByScalar(-0.05)
       if (playerBox.intersectsBox(scratch)) {
         e.scored = true
         e.active = false

@@ -83,15 +83,14 @@ export class Powerups {
     for (const e of this.pool) {
       if (!e.active || e.scored) continue
       this.tmpBox.setFromObject(e.group)
-      // Swept AABB: powerups are small orbs (~0.45 radius) and move at world
-      // speed. At max speed (28 units/s) with fixedDt (1/60), they move
-      // 0.467 per step — comparable to their size. Expanding the box in Z
-      // to cover [prevZ, currentZ] prevents tunneling.
+      // Apply X/Y shrink first (more forgiving hitbox), then Z-only
+      // expansion for swept AABB. The order matters: expandByScalar affects
+      // all axes, so we do the Z sweep after the shrink.
+      this.tmpBox.expandByScalar(-0.15)
       const halfThick = (this.tmpBox.max.z - this.tmpBox.min.z) / 2
       const curZ = e.group.position.z
       this.tmpBox.min.z = Math.min(this.tmpBox.min.z, e.prevZ - halfThick)
       this.tmpBox.max.z = Math.max(this.tmpBox.max.z, curZ + halfThick)
-      this.tmpBox.expandByScalar(-0.15)
       if (playerBox.intersectsBox(this.tmpBox)) {
         e.scored = true
         e.active = false

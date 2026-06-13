@@ -139,17 +139,14 @@ export class Pickups {
       if (!e.active || e.scored) continue
       const m = e.mesh
       scratch.setFromObject(m)
-      // Swept AABB: coins are thin (0.08 thickness) and move at world speed.
-      // At max speed (28 units/s) with fixedDt (1/60), a coin moves 0.467 per
-      // step — larger than its own thickness. Expanding the box in Z to cover
-      // [prevZ, currentZ] prevents tunneling. We also reduced the expandByScalar
-      // from -0.1 to -0.05 to make the hitbox slightly more forgiving (coins
-      // are small and players expect to collect them when "close enough").
+      // Apply X/Y shrink first (more forgiving hitbox), then Z-only
+      // expansion for swept AABB. Order matters so the swept volume isn't
+      // negated by the shrink.
+      scratch.expandByScalar(-0.05)
       const halfThick = (scratch.max.z - scratch.min.z) / 2
       const curZ = m.position.z
       scratch.min.z = Math.min(scratch.min.z, e.prevZ - halfThick)
       scratch.max.z = Math.max(scratch.max.z, curZ + halfThick)
-      scratch.expandByScalar(-0.05)
       if (playerBox.intersectsBox(scratch)) {
         e.scored = true
         e.active = false

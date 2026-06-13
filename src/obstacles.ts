@@ -188,18 +188,14 @@ export class Obstacles {
     for (const e of this.pool) {
       if (!e.active) continue
       this.box.setFromObject(e.group)
-      // Swept AABB: an obstacle at max speed moves farther per step (0.467)
-      // than some of its own Z thicknesses (sign panel is ~0.1, pole is
-      // 0.06). The end-of-step AABB alone lets the player "skip" past the
-      // obstacle between two consecutive physics steps. Expand the box in
-      // Z to cover [prevZ, currentZ] so the swept volume is tested. The
-      // X/Y extents are unchanged (the obstacle doesn't move on those
-      // axes), so this is a cheap, exact swept test for a pure-Z move.
+      // Apply X/Y shrink first (forgiving hitbox), then Z-only expansion
+      // for swept AABB. Order matters so the swept volume covers the full
+      // movement range.
+      this.box.expandByScalar(-0.1)
       const halfThick = (this.box.max.z - this.box.min.z) / 2
       const curZ = e.group.position.z
       this.box.min.z = Math.min(this.box.min.z, e.prevZ - halfThick)
       this.box.max.z = Math.max(this.box.max.z, curZ + halfThick)
-      this.box.expandByScalar(-0.1)
       if (playerBox.intersectsBox(this.box)) return true
     }
     return false
